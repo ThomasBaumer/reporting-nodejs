@@ -1,0 +1,72 @@
+<div class="jumbotron text-center">
+    <h1>Dashboard: Vorfälle und Datenanalysen der Blockchain</h1>
+</div>
+<script>
+    const rpc = new eosjs_jsonrpc.JsonRpc("http://127.0.0.1:8888");
+    async function getEOS_item() {
+        const result = await rpc.get_table_rows({
+            "json": true,
+            "code": "reporting",
+            "scope": "reporting",
+            "table": "item",
+            "reverse": true
+        });
+        console.log(result);
+        return result;
+    }
+    getEOS_item().then(function(resp) {
+        console.log(resp);
+        //assemble table
+        var table = '<table>';
+        table += '<tr><th>#</th><th>Hash</th><th>Vorgänger</th><th>Reporter</th><th>Rating</th><th>Voteable</th><th>Votes</th><th>BSI-OK</th><th>Typ</th></tr>'
+        for(var i = 0; i < resp.rows.length; i++) {
+            var row = resp.rows[i];
+            var text = ""; var label = "";
+            table = table + '<tr>';
+
+            table = table + '<td>' + JSON.stringify(row.key) + '</td>';
+            table = table + '<td>' + JSON.stringify(row.hash) + '</td>';
+            table = table + '<td>' + JSON.stringify(row.parentLink) + '</td>';
+            table = table + '<td>' + JSON.stringify(row.reporter) + '</td>';
+
+            //rating
+            label = 'class="label-ok"';
+            if (JSON.stringify(row.rating) == 0 || JSON.stringify(row.voteable) == 1) { 
+                label = 'class="label-attention"'; 
+                if (JSON.stringify(row.voteable) == 0) { label = 'class="label-danger"'; }
+            }
+            table = table + '<td><div ' + label + '>' + JSON.stringify(row.rating) + '</td>';
+
+            //Voteable
+            text = "Offen"; label = 'class="label-primary"';
+            if (JSON.stringify(row.voteable) == 0) { text = "<b>Abgeschlossen</b>"; label = 'class="label-secondary"'; }
+            table = table + '<td><div ' + label + '>' + text + '</div></td>';
+            
+            //Confirmations/Votes
+            table = table + '<td>' + JSON.stringify(row.confirmations) + "/" + JSON.stringify(row.votes) + '</td>';
+
+            //BSI-OK
+            text = "OK"; label = 'class="label-ok"';
+            if (JSON.stringify(row.approval) == 0) { text = "<b>Keine Bewertung</b>"; label = 'class="label-attention"'; }
+            table = table + '<td><div ' + label + '>' + text + '</div></td>';
+
+            //Typ
+            text = "Vorfall"; label = 'class="label-primary"';
+            if (JSON.stringify(row.incident) == 0) { text = "<b>Datenanalyse</b>"; label = 'class="label-secondary"'; }
+            table = table + '<td><div ' + label + '>' + text + '</div></td>';
+            
+            table = table + '</tr>';
+        }
+        table = table + '</table>';
+
+        $('p.items').html(table);
+    });
+</script>
+<div class="container">
+    <div class="row">
+        <div class="col-lg-6">
+            <h3>Daten aus der Blockchain</h3>
+            <p class="items"></p>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,45 @@
+<div class="jumbotron text-center">
+    <h1>Einen Vorfall oder eine Datenanalyse melden</h1>
+</div>
+<div class="container">
+    <div class="row">
+        <div class="col-lg-6">
+            <h3>Einen Vorfall melden</h3>
+            <p>
+                <form action="/report" method="post">
+                    <input id="itemType" name="itemType" type="hidden" value="incident" />
+                    <P>
+                        <label>* Die Vorfallsdaten als STIX/VERIS/IODEF</label>
+                        <textarea rows = "5" cols = "50" name = "incidentData" placeholder="XML oder JSON erwartet." required ></textarea>
+                    </P>
+                    <p>
+                        <label>Vorgänger<br>(optional - benötigt für kaskadierende Vorfälle)</label>
+                        <input id="incidentAncestor" name="incidentAncestor" type="number" min=0  placeholder="0" />
+                    </P>
+                    <p>
+                        <input class="btn btn-primary btn-lg" type="submit" value="Vorfall berichten">
+                    </p>
+                </form>
+            </p>
+        </div>
+        <div class="col-lg-6">
+            <h3>Eine Datenanalyse melden</h3>
+            <p>
+                <form action="/report" method="post">
+                    <input id="itemType" name="itemType" type="hidden" value="datamining" />
+                    <P>
+                        <label>* Die Datenanalyse in einem geeignetem Format</label>
+                        <textarea rows = "5" cols = "50" name = "dataminingData" placeholder="XML oder JSON erwartet." required ></textarea>
+                    </P>
+                    <p>
+                        <label>Vorgänger<br>(optional - benötigt für kaskadierende Datenanalysen)</label>
+                        <input id="dataminingAncestor" type="number" min=0 name="dataminingAncestor" placeholder="0" />
+                    </P>
+                    <p>
+                        <input class="btn btn-primary btn-lg" type="submit" value="Datenanalyse berichten">
+                    </p>
+                </form>
+            </p>
+        </div>
+    </div>
+</div>

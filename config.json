@@ -1,0 +1,15 @@
+{
+	"user":"ion",
+	"privateKey":"5K3tvcnshZeYzA6CcrykjWa6hV3kH1KUwdtsbfFKVKr29LF2Vy9",
+	"publicKey":"EOS87x2uqXexzxusrZFZmoHAJaYyLT1HwM396hKFBzKLsvoXApmVW",
+	"EOSIO": {
+		"ip":"127.0.0.1",
+		"ports":[ "8888", "5555" ],
+		"version":"v1.7.0"
+	},
+	"MongoDB": {
+		"ip":"127.0.0.1",
+		"ports":[ "27017", "1324" ],
+		"version":"v4.0.9"
+	}
+}
