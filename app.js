@@ -14,7 +14,7 @@ const fetch = require('node-fetch');                                    // node 
 const { TextEncoder, TextDecoder } = require('util');                   // node only; native TextEncoder/Decoder
 //load custom config file
 const config = require(__dirname + '/config.json');
-const signatureProvider = new JsSignatureProvider([config.privateKey]);
+const signatureProvider = new JsSignatureProvider([config.privateKey_eos]);
 const rpc = new JsonRpc('http://' + config.EOSIO.ip + ':' + config.EOSIO.ports[0], { fetch });
 const api = new Api({ rpc, signatureProvider, textDecoder: new TextDecoder(), textEncoder: new TextEncoder() });
 
@@ -25,7 +25,10 @@ const jquery = require("jquery");
 //mongodb
 const MongoClient = require('mongodb').MongoClient;
 const assert = require('assert');
-const url_mongo = 'mongodb://' + config.MongoDB.ip + ':' + config.MongoDB.ports[0];;
+const url_mongo = 'mongodb://' + config.MongoDB.ip + ':' + config.MongoDB.ports[0];
+
+//crypto
+var crypto = require('crypto');
 
 
 router.use(function (req,res,next) {
@@ -56,23 +59,82 @@ app.use(express.urlencoded({extended: true}));
 //REPORT INCIDENT
 app.post('/report', (req,res) => {
 	console.log(req.body);
-	const itemType = req.body.itemType;
-	if(itemType == "incident") {
-		const data = req.body.incidentData;
-		const ancestor = req.body.incidentAncestor;
-		databaseTransaction_report(data, true);
-		chainTransaction_report(data, ancestor, true);
-		getPageReport(res, "Der Vorfall wurde erfolgreich gemeldet.", false);
-	} else if (itemType == "datamining") {
-		const data = req.body.dataminingData;
-		const ancestor = req.body.dataminingAncestor;
-		databaseTransaction_report(data, false);
-		chainTransaction_report(data, ancestor, false);
-		getPageReport(res, "Die Datenanalyse wurde erfolgreich gemeldet.", false);
-	} else {
-		getPageReport(res, "FEHLER: Benutzen sie bitte das Formular um die Meldung zu vollziehen.", true);
+	try {
+		var isIncident = true; if (req.body.itemType == "datamining") { isIncident = false; }
+		var data, ancestor;
+		if(isIncident) {
+			data 		= req.body.incidentData;
+			ancestor 	= req.body.incidentAncestor;
+		} else {
+			data 		= req.body.dataminingData;
+			ancestor 	= req.body.dataminingAncestor;
+		}
+
+		//encrypt data
+		var fileKey = crypto.randomBytes(32);
+		//var fileKey_base64 = Buffer.from(fileKey, 'utf8').toString('base64');publicKey_mongo_BSI
+		var encryptedFileKey = encryptRSA(fileKey, config.publicKey_mongo);
+		var encryptedFileKeyBSI = encryptRSA(fileKey, config.publicKey_mongo_BSI);
+		var { iv, encryptedData } = encryptAES(data, fileKey);
+		var hashEncryptedData = hashSHA256(encryptedData);
+
+		/*console.log("fileKey: " + fileKey);
+		console.log("fileKey_base64: " + fileKey_base64);
+		console.log("encryptedFileKey: " + encryptedFileKey);
+		console.log("iv: " + iv);
+		console.log("encryptedData: " + encryptedData);
+		console.log("hashEncryptedData: " + hashEncryptedData);
+
+		console.log("-------------");*/
+
+		//decrypt data
+		var decryptedFileKey = decryptRSA(encryptedFileKey, config.privateKey_mongo);
+		//var decryptedFileKey_base64 = Buffer.from(decryptedFileKey, 'base64').toString('base64');
+		var decryptedData = decryptAES(encryptedData, decryptedFileKey, iv);
+
+		/*console.log("decryptedFileKey: " + decryptedFileKey);
+		console.log("decryptedFileKey_base64: " + decryptedFileKey_base64);
+		console.log("decryptedData: " + decryptedData);*/
+
+		if(decryptedData != data) {
+			throw "Fehlerhafter Verschlüsselung";
+		}
+
+		databaseTransaction_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, iv, isIncident);
+		chainTransaction_report(hashEncryptedData, ancestor, isIncident);
+
+		getPageReport(res, "Meldung erfolgreich.", false);
+	} catch (e) {
+		getPageReport(res, "FEHLER: Meldung war nicht erfolgreich. Verschlüsselung oder Blockchain/Datenbank Transaktion schlug fehl.", true);
 	}
 });
+app.post('/mypage', (req,res) => {
+	console.log(req.body);
+	if (req.body.itemType == "calc_keypair") { 
+		const passphrase = getCryptoRandom(10);
+		const { generateKeyPairSync } = require('crypto');
+		const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+			modulusLength: 4096,
+			publicKeyEncoding: {
+				type: 'spki',
+				format: 'pem'
+			},
+			privateKeyEncoding: {
+				type: 'pkcs8',
+				format: 'pem',
+				cipher: 'aes-256-cbc',
+				passphrase: passphrase
+			}
+		});
+		config.privateKey_mongo = privateKey;
+		config.publicKey_mongo = publicKey;
+		config.passphrase_mongo = passphrase;
+		fs.writeFileSync(__dirname + '/config.json', JSON.stringify(config, null, 2));
+	}
+	getPageMypage(res);
+});
+
+
 
 
 
@@ -103,7 +165,62 @@ function getPageViewBlockchain(res) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
 	var view 		= fs.readFileSync(path + 'view-blockchain.html', 'utf8');
-	res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + view + '</body></html>');
+
+	var items = chainQuery_items();
+	items.then( function(result) {
+
+		//assemble table
+		var table = '<table>';
+        table += '<tr><th>#</th><th>Hash</th><th>Vorgänger</th><th>Reporter</th><th>Rating</th><th>Voteable</th><th>Votes</th><th>BSI-OK</th><th>Typ</th></tr>'
+        for(var i = 0; i < result.rows.length; i++) {
+            var row = result.rows[i];
+            var text = ""; var label = "";
+            table = table + '<tr>';
+
+            table = table + '<td>' + JSON.stringify(row.key) + '</td>';
+            table = table + '<td>' + JSON.stringify(row.hash) + '</td>';
+            table = table + '<td>' + JSON.stringify(row.parentLink) + '</td>';
+            table = table + '<td>' + JSON.stringify(row.reporter) + '</td>';
+
+            //rating
+            label = 'class="label-ok"';
+            if (JSON.stringify(row.rating) == 0 || JSON.stringify(row.voteable) == 1) { 
+                label = 'class="label-attention"'; 
+                if (JSON.stringify(row.voteable) == 0) { label = 'class="label-danger"'; }
+            }
+            table = table + '<td><div ' + label + '>' + JSON.stringify(row.rating) + '</td>';
+
+            //Voteable
+            text = "Offen"; label = 'class="label-primary"';
+            if (JSON.stringify(row.voteable) == 0) { text = "<b>Abgeschlossen</b>"; label = 'class="label-secondary"'; }
+            table = table + '<td><div ' + label + '>' + text + '</div></td>';
+            
+            //Confirmations/Votes
+            table = table + '<td>' + JSON.stringify(row.confirmations) + "/" + JSON.stringify(row.votes) + '</td>';
+
+            //BSI-OK
+            text = "OK"; label = 'class="label-ok"';
+            if (JSON.stringify(row.approval) == 0) { text = "<b>Keine Bewertung</b>"; label = 'class="label-attention"'; }
+            table = table + '<td><div ' + label + '>' + text + '</div></td>';
+
+            //Typ
+            text = "Vorfall"; label = 'class="label-primary"';
+            if (JSON.stringify(row.incident) == 0) { text = "<b>Datenanalyse</b>"; label = 'class="label-secondary"'; }
+            table = table + '<td><div ' + label + '>' + text + '</div></td>';
+            
+            table = table + '</tr>';
+        }
+        table = table + '</table>';
+
+        //place table;
+		var view_dom = new jsdom.JSDOM(view);
+		var $ = jquery(view_dom.window);
+		$('p.items').html(table);
+		view = view_dom.serialize();
+
+		//send page to user
+		res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + view + '</body></html>');
+	}, function(err) { console.log(err); });
 }
 function getPageViewDatabase(res) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
@@ -114,24 +231,42 @@ function getPageViewDatabase(res) {
 	items.then( function(result) {
 		//assemble table
 		var table = '<table>';
-		table += '<tr><th>Hash</th><th>Im Besitz</th><th>Daten</th><th>Typ</th></tr>';
+		table += '<tr><th>Hash</th><th>Typ</th><th>Daten</th></tr>';
 		for(var i = 0; i < result.length; i++) {
 			var row = result[i];
 			var text = ""; var label = "";
 
+			var encryptedFileKey;
+			var owned = false;
+			for(var k = 0; k < row.fileKeys.length; k++) {
+				if (config.user == row.fileKeys[k].user) {
+					var owned = true;
+					encryptedFileKey = JSON.stringify(row.fileKeys[k].encryptedFileKey);
+					break;
+				}
+			}
+
+			var encryptedData = JSON.stringify(row.encryptedData).substring(1, JSON.stringify(row.encryptedData).length-1); //LITERALS!
+			var iv = JSON.stringify(row.init_vector).substring(1, JSON.stringify(row.init_vector).length-1); //LITERALS!
+
+			var decryptedFileKey = decryptRSA(encryptedFileKey, config.privateKey_mongo);
+			var decryptedData = decryptAES(encryptedData, decryptedFileKey, iv);
+
            	table += '<tr>';
+           	//HASH
            	table += '<td>' + JSON.stringify(row._id) + '</td>';
 
-           	text = "Nein"; label = 'class="label-danger"';
-            if (/* crazy file key logic */ false) { text = "Ja"; label = 'class="label-ok"'; }
-           	table += '<td><div ' + label + '>' + text + '</td>';
-
-			//TODO crazy encrpytion logic
-           	table += '<td>' + JSON.stringify(row.data) + '</td>';
-
+           	//TYP
             text = "Vorfall"; label = 'class="label-primary"';
-            if (JSON.stringify(row.itemType) == 0) { text = "<b>Datenanalyse</b>"; label = 'class="label-secondary"'; }
+            if (!row.itemType) { text = "<b>Datenanalyse</b>"; label = 'class="label-secondary"'; }
            	table += '<td><div ' + label + '>' + text + '</td>';
+
+           	//IN BESITZ
+            if (owned) { 
+            	table += '<td>' + decryptedData + '</td>';
+            } else {
+            	table += '<td><div class="label-danger">Nicht in Besitz</td>';
+            }
 			table += '</tr>';
 		}
 		table += '</table>';
@@ -163,9 +298,12 @@ function getPageMypage(res) {
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
 	var mypage 		= fs.readFileSync(path + 'mypage.html', 'utf8');
 	var account		= `<table>
-			<tr><td>User</td><td>` + config.user + `</tr>
-			<tr><td>Public Key</td><td>` + config.publicKey + `</tr>
-			<tr><td>Private Key</td><td>` + config.privateKey + `</tr></table>`;
+			<tr><td>EOSIO User</td><td>` + config.user + `</tr>
+			<tr><td>EOSIO Public Key</td><td>` + config.publicKey_eos.substr(0,5) + `...</tr>
+			<tr><td>EOSIO Private Key</td><td>` + config.privateKey_eos.substr(0,5) + `...</tr>
+			<tr><td>MongoDB Public Key</td><td>` + config.publicKey_mongo.substr(27, 5) + `...</tr>
+			<tr><td>MongoDB Private Key</td><td>` + config.privateKey_mongo.substr(38,5) + `...</tr>
+			<tr><td>MongoDB Passphrase</td><td>` + config.passphrase_mongo.substr(0,3) + `...</tr></table>`;
 	var endpoints 	= `<table>
 			<tr><th>Container</th><th>IP und Port</th><th>Version</th></tr>
 			<tr><td>EOSIO</td><td>` + config.EOSIO.ip + ':' + config.EOSIO.ports[0] + ',<br>' + config.EOSIO.ip + ':' + config.EOSIO.ports[1] + `</td><td>` + config.EOSIO.version + `</td></tr>
@@ -209,13 +347,28 @@ function databaseQuery_item() {
 
 
 //DATABASE TRANSACTIONS
-function databaseTransaction_report(data, incident) {
+function databaseTransaction_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, init_vector, isIncident) {
 	MongoClient.connect(url_mongo, function(err, client) {
 		assert.equal(null, err);
 		console.log("Connected successfully to MongoDB Container");
 		const db = client.db('reporting');
 		const collection = db.collection('item');
-		collection.insertOne({_id:data, itemType:incident },
+		collection.insertOne({
+			_id:hashEncryptedData,
+			encryptedData:encryptedData,
+			fileKeys: [
+				{
+					encryptedFileKey:encryptedFileKey,
+					user:config.user
+				},
+				{
+					encryptedFileKey:encryptedFileKeyBSI,
+					user:"bsi"
+				}
+			],
+			init_vector:init_vector,
+			itemType:isIncident
+		},
 			function(err, result) {
 				assert.equal(err, null);
 				assert.equal(1, result.result.n);
@@ -224,6 +377,60 @@ function databaseTransaction_report(data, incident) {
 			}
 		);
 	  client.close();
+	});
+}
+
+
+
+
+//CHAIN QUERY
+async function chainQuery_blamings() {
+	return await rpc.get_table_rows({
+		"json": true,
+		"code": "reporting",
+		"scope": "reporting",
+		"table": "blaming"
+	});
+}
+async function chainQuery_items() {
+	return await rpc.get_table_rows({
+		"json": true,
+		"code": "reporting",
+		"scope": "reporting",
+		"table": "item",
+		"reverse": true
+	});
+}
+async function chainQuery_orders() {
+	return await rpc.get_table_rows({
+		"json": true,
+		"code": "reporting",
+		"scope": "reporting",
+		"table": "order"
+	});
+}
+async function chainQuery_users() {
+	return await rpc.get_table_rows({
+		"json": true,
+		"code": "reporting",
+		"scope": "reporting",
+		"table": "users"
+	});
+}
+async function chainQuery_votings() {
+	return await rpc.get_table_rows({
+		"json": true,
+		"code": "reporting",
+		"scope": "reporting",
+		"table": "voting"
+	});
+}
+async function chainQuery_votingbs() {
+	return await rpc.get_table_rows({
+		"json": true,
+		"code": "reporting",
+		"scope": "reporting",
+		"table": "votingb"
 	});
 }
 
@@ -451,4 +658,48 @@ function chainTransaction_voteb(blameKey, value) {
 	  });
 	  console.dir(result);
 	})();
+}
+
+
+
+
+
+//CRYPTO
+function getCryptoRandom(size){
+	const buf = Buffer.alloc(size);
+	return crypto.randomFillSync(buf).toString('hex');
+}
+function hashSHA256(text) {
+	return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+}
+function encryptAES(text, key) {
+	const iv = crypto.randomBytes(16);
+	let cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(key), iv);
+	let encrypted = cipher.update(text);
+	encrypted = Buffer.concat([encrypted, cipher.final()]);
+	return { iv: iv.toString('hex'), encryptedData: encrypted.toString('hex') };
+}
+function decryptAES(text, key, init_vector) {
+	let iv 				= Buffer.from(init_vector, 'hex');
+	let encryptedText   = Buffer.from(text, 'hex');
+	let decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key), iv);
+	let decrypted = decipher.update(encryptedText);
+	decrypted = Buffer.concat([decrypted, decipher.final()]);
+	return decrypted.toString();
+}
+function encryptRSA(toEncrypt, publicKey) {
+  const buffer = Buffer.from(toEncrypt, 'utf8')
+  const encrypted = crypto.publicEncrypt(publicKey, buffer)
+  return encrypted.toString('base64')
+}
+function decryptRSA(toDecrypt, privateKey) {
+  const buffer = Buffer.from(toDecrypt, 'base64')
+  const decrypted = crypto.privateDecrypt(
+    {
+      key: privateKey,
+      passphrase: config.passphrase_mongo,
+    },
+    buffer,
+  )
+  return decrypted
 }
