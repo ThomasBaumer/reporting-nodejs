@@ -40,10 +40,11 @@ router.use(function (req,res,next) {
 router.get('/', 				function(req,res){ res.redirect('/home'); });
 router.get('/home', 			function(req,res){ getPageHome(res); });
 router.get('/report', 			function(req,res){ getPageReport(res); });
-router.get('/buy', 				function(req,res){ getPageBuy(res); });
 router.get('/view-blockchain', 	function(req,res){ getPageViewBlockchain(res); });
 router.get('/view-database', 	function(req,res){ getPageViewDatabase(res); });
 router.get('/vote', 			function(req,res){ getPageVote(res); });
+router.get('/buy', 				function(req,res){ getPageBuy(res); });
+router.get('/transfer', 		function(req,res){ getPageTransfer(res); });
 router.get('/blame', 			function(req,res){ getPageBlame(res); });
 router.get('/mypage', 			function(req,res){ getPageMypage(res); });
 router.get('/about', 			function(req,res){ getPageAbout(res); });
@@ -133,6 +134,10 @@ app.post('/mypage', (req,res) => {
 	}
 	getPageMypage(res);
 });
+app.post('/transfer', (req,res) => {
+	chainTransaction_transfer(req.body.to, req.body.amount);
+	getPageTransfer(res);
+});
 
 
 
@@ -155,12 +160,6 @@ function getPageReport(res, message, error) {
 	}
 	res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + report + '</body></html>');
 }
-function getPageBuy(res) {
-	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
-	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
-	var buy 		= fs.readFileSync(path + 'buy.html', 'utf8');
-	res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + buy + '</body></html>');
-}
 function getPageViewBlockchain(res) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
@@ -171,46 +170,46 @@ function getPageViewBlockchain(res) {
 
 		//assemble table
 		var table = '<table>';
-        table += '<tr><th>#</th><th>Hash</th><th>Vorgänger</th><th>Reporter</th><th>Rating</th><th>Voteable</th><th>Votes</th><th>BSI-OK</th><th>Typ</th></tr>'
+        table += '<tr><th>#</th><th>Hash</th><th>Typ</th><th>#-Link</th><th>Reporter</th><th>Rating</th><th>Voteable</th><th>Votes</th><th>BSI-OK</th></tr>'
         for(var i = 0; i < result.rows.length; i++) {
             var row = result.rows[i];
             var text = ""; var label = "";
-            table = table + '<tr>';
+            table += '<tr>';
 
-            table = table + '<td>' + JSON.stringify(row.key) + '</td>';
-            table = table + '<td>' + JSON.stringify(row.hash) + '</td>';
-            table = table + '<td>' + JSON.stringify(row.parentLink) + '</td>';
-            table = table + '<td>' + JSON.stringify(row.reporter) + '</td>';
-
+            //key
+            table += '<td>' + JSON.stringify(row.key) + '</td>';
+            //hash
+            var hash = JSON.stringify(row.hash).substring(1, JSON.stringify(row.hash).length-1);
+            table += '<td>' + hash.slice(0, hash.length/2) + '<br>' + hash.slice(hash.length/2) + '</td>';
+            //Typ
+            text = "Vorfall"; label = 'class="label-primary"';
+            if (JSON.stringify(row.incident) == 0) { text = "<b>Datenanalyse</b>"; label = 'class="label-secondary"'; }
+            table += '<td><div ' + label + '>' + text + '</div></td>';            
+            //parent Link
+            table += '<td>' + JSON.stringify(row.parentLink) + '</td>';
+            //reporter
+            table += '<td>' + JSON.stringify(row.reporter).substring(1, JSON.stringify(row.reporter).length-1) + '</td>';
             //rating
             label = 'class="label-ok"';
             if (JSON.stringify(row.rating) == 0 || JSON.stringify(row.voteable) == 1) { 
                 label = 'class="label-attention"'; 
                 if (JSON.stringify(row.voteable) == 0) { label = 'class="label-danger"'; }
             }
-            table = table + '<td><div ' + label + '>' + JSON.stringify(row.rating) + '</td>';
-
+            table += '<td><div ' + label + '>' + JSON.stringify(row.rating) + '</td>';
             //Voteable
             text = "Offen"; label = 'class="label-primary"';
             if (JSON.stringify(row.voteable) == 0) { text = "<b>Abgeschlossen</b>"; label = 'class="label-secondary"'; }
-            table = table + '<td><div ' + label + '>' + text + '</div></td>';
-            
+            table += '<td><div ' + label + '>' + text + '</div></td>';
             //Confirmations/Votes
-            table = table + '<td>' + JSON.stringify(row.confirmations) + "/" + JSON.stringify(row.votes) + '</td>';
-
+            table += '<td>' + JSON.stringify(row.confirmations) + "/" + JSON.stringify(row.votes) + '</td>';
             //BSI-OK
             text = "OK"; label = 'class="label-ok"';
             if (JSON.stringify(row.approval) == 0) { text = "<b>Keine Bewertung</b>"; label = 'class="label-attention"'; }
-            table = table + '<td><div ' + label + '>' + text + '</div></td>';
+            table += '<td><div ' + label + '>' + text + '</div></td>';
 
-            //Typ
-            text = "Vorfall"; label = 'class="label-primary"';
-            if (JSON.stringify(row.incident) == 0) { text = "<b>Datenanalyse</b>"; label = 'class="label-secondary"'; }
-            table = table + '<td><div ' + label + '>' + text + '</div></td>';
-            
-            table = table + '</tr>';
+            table += '</tr>';
         }
-        table = table + '</table>';
+        table += '</table>';
 
         //place table;
 		var view_dom = new jsdom.JSDOM(view);
@@ -254,7 +253,8 @@ function getPageViewDatabase(res) {
 
            	table += '<tr>';
            	//HASH
-           	table += '<td>' + JSON.stringify(row._id) + '</td>';
+            var hash = JSON.stringify(row._id).substring(1, JSON.stringify(row._id).length-1);
+           	table += '<td>' + hash.slice(0, hash.length/2) + '<br>' + hash.slice(hash.length/2) + '</td>';
 
            	//TYP
             text = "Vorfall"; label = 'class="label-primary"';
@@ -286,6 +286,55 @@ function getPageVote(res) {
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
 	var vote 		= fs.readFileSync(path + 'vote.html', 'utf8');
 	res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + vote + '</body></html>');
+}
+function getPageBuy(res) {
+	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
+	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
+	var buy 		= fs.readFileSync(path + 'buy.html', 'utf8');
+	res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + buy + '</body></html>');
+}
+function getPageTransfer(res) {
+	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
+	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
+	var transfer 	= fs.readFileSync(path + 'transfer.html', 'utf8');
+
+	var users = chainQuery_users();
+	users.then( function(result) {
+
+		//assemble table
+		var table = '<table>';
+        table += '<tr><th>User</th><th>Kontostand</th><th>Status</th><th>Verifikator</th><th>Beschwerden</th><th>Eingefroren</th></tr>'
+        for(var i = 0; i < result.rows.length; i++) {
+            var row = result.rows[i];
+            var text = ""; var label = "";
+            table += '<tr>';
+
+            //user
+            table += '<td>' + JSON.stringify(row.user).substring(1, JSON.stringify(row.user).length-1) + '</td>';
+            //Kontostand
+            table += '<td>' + JSON.stringify(row.balance) + '</td>';
+            //Status
+            table += '<td>R: ' + JSON.stringify(row.statusR) + '<br>V: ' + JSON.stringify(row.statusV) + '</td>';
+            //Verifikator
+            text = "Ja"; label = 'class="label-ok"';
+            if (JSON.stringify(row.verificator) == 0) { text = "Nein"; label = 'class="label-danger"'; }
+            table += '<td><div ' + label + '>' + text + '</div></td>';
+            //Beschwerden
+            table += '<td>' + JSON.stringify(row.blames) + '</td>';
+            //Eingefroren
+            text = "Nein"; label = 'class="label-ok"';
+            if (JSON.stringify(row.frozen) == 1) { text = "Ja"; label = 'class="label-danger"'; }
+            table += '<td><div ' + label + '>' + text + '</div></td>';
+        }
+
+		//place table;
+		var transfer_dom = new jsdom.JSDOM(transfer);
+		var $ = jquery(transfer_dom.window);
+		$('p.users').html(table);
+		transfer = transfer_dom.serialize();
+
+		res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + transfer + '</body></html>');
+	}, function(err) { console.log(err); });
 }
 function getPageBlame(res) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
