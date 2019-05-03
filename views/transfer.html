@@ -2,37 +2,26 @@
     <h1>Eine Überweisung tätigen</h1>
 </div>
 <div class="container">
-    <div class="row">
-        <div class="col-lg-6">
-            <h3>Überweisung</h3>
-            <p>
-                <form action="/transfer" method="post">
-                    <table>
-                        <tr>
-                            <P>
-                                <td><label>* An</label></td>
-                                <td><input type="text" id="to" name="to" maxlength="20" placeholder="EOSIO User" required /></td>
-                            </P>
-                        </tr>
-                        <tr>
-                            <p>
-                                <td><label>* Betrag</label></td>
-                                <td><input type="number" id="amount" name="amount"  min=0  placeholder="0" required /></td>
-                            </P>
-                        </tr>
-                        <tr>
-                            <p>
-                                <td colspan="2"><input class="btn btn-primary btn-lg" type="submit" value="Überweisen"></td>
-                            </p>
-                        </tr>
-                    </table>
-                </form>
-            </p>
+    <div class="row justify-content-center">
+        <div class="row">
+            <div class="col-lg-12">
+                <p><form action="/transfer" method="post"><table><tr>
+                    <td><label>* An</label></td>
+                    <td><input type="text" id="to" name="to" maxlength="20" placeholder="EOSIO User" required /></td>
+                    <td><label>* Betrag</label></td>
+                    <td><input type="number" id="amount" name="amount"  min=0  placeholder="0" required /></td>
+                    <td><input class="btn btn-primary btn-lg" type="submit" value="Überweisen"></td>
+                </tr></table></form></p>
+                <p class="error"></p>
+            </div>
         </div>
-        <div class="col-lg-6">
-            <h3>EOSIO Users</h3>
-            <p class="users" >
-            </p>
+    </div>
+    <div class="row justify-content-center">
+        <div class="row">
+            <div class="col-lg-12">
+                <h3>EOSIO Users</h3>
+                <p class="users"></p>
+            </div>
         </div>
     </div>
 </div>
