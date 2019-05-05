@@ -1,0 +1,11 @@
+docker run -p 27017:27017 mongo --directoryperdb --logappend --port 27017
+node app.js
+
+
+docker run -p 27017:27017 -v ~/data/db:/data/db mongo --directoryperdb --logappend --port 27017
+
+
+
+
+docker run -dt --name eosio_v1.7.0 --publish 8888:8888 --publish 5555:5555 --volume C:\Users\tomba\.eosio\v1.7.0:/eosio -w /eosio eostudio/eos:v1.7.0 /bin/bash
+

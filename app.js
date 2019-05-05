@@ -102,7 +102,7 @@ app.post('/report', (req,res) => {
 		}
 
 		databaseTransaction_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, iv, isIncident);
-		var report_chain_promise = chainTransaction_report(hashEncryptedData, ancestor, isIncident);
+		var report_chain_promise = chainTransaction_report(encryptedData, ancestor, isIncident);
 		report_chain_promise.then( function(result) {
 			getPageReport(res, false, true);
 		}, function(err) { 
@@ -159,8 +159,31 @@ app.post('/blame', (req,res) => {
 		getPageBlame(res, err);
 	});
 });
+app.post('/view-database', (req,res) => {
 
+	var items = chainQuery_items();
+	items.then( function(result) {
+		for(var i = 0; i < result.rows.length; i++) {
+            var row = result.rows[i];
+            var item_hash = JSON.stringify(row.hash).substring(1, JSON.stringify(row.hash).length-1);
 
+            if (item_hash == req.body.hash) {
+            	console.log(item_hash);
+            	console.log(JSON.stringify(row.key));
+            	
+				var promise = chainTransaction_buy(JSON.stringify(row.key));
+				promise.then( function(result) {
+					getPageViewDatabase(res, false, true);
+				}, function(err) { 
+					getPageViewDatabase(res, err);
+				});
+
+            }
+		}
+	}, function(err) { 
+		getPageViewDatabase(res, err);
+	});
+});
 
 
 
@@ -254,11 +277,26 @@ function getPageViewBlockchain(res) {
 		res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + view + '</body></html>');
 	}, function(err) { console.log(err); });
 }
-function getPageViewDatabase(res) {
+function getPageViewDatabase(res, err, done) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
 	var view 		= fs.readFileSync(path + 'view-database.html', 'utf8');
 	var items 		= databaseQuery_item();
+
+	if(err) {
+		var message = "<div class='label-danger'>Bestellung fehlgeschlagen</div>"+err;
+		var view_error_dom = new jsdom.JSDOM(view);
+		var $ = jquery(view_error_dom.window);
+		$('p.error').html(message);
+		view = view_error_dom.serialize();
+	}
+	if(done) {
+		var message = "<div class='label-ok'>Bestellung erfolgreich</div>";
+		var view_error_dom = new jsdom.JSDOM(view);
+		var $ = jquery(view_error_dom.window);
+		$('p.error').html(message);
+		view = view_error_dom.serialize()
+	}
 
 	items.then( function(result) {
 		//assemble table
@@ -266,23 +304,25 @@ function getPageViewDatabase(res) {
 		table += '<tr><th>Hash</th><th>Typ</th><th>Daten</th></tr>';
 		for(var i = 0; i < result.length; i++) {
 			var row = result[i];
+			console.log(row);
 			var text = ""; var label = "";
 
-			var encryptedFileKey;
+			var encryptedFileKey, encryptedData, iv, decryptedFileKey, decryptedData;
 			var owned = false;
 			for(var k = 0; k < row.fileKeys.length; k++) {
 				if (config.user == row.fileKeys[k].user) {
 					var owned = true;
 					encryptedFileKey = JSON.stringify(row.fileKeys[k].encryptedFileKey);
+
+					encryptedData = JSON.stringify(row.encryptedData).substring(1, JSON.stringify(row.encryptedData).length-1); //LITERALS!
+					iv = JSON.stringify(row.init_vector).substring(1, JSON.stringify(row.init_vector).length-1); //LITERALS!
+
+					decryptedFileKey = decryptRSA(encryptedFileKey, config.privateKey_mongo);
+					decryptedData = decryptAES(encryptedData, decryptedFileKey, iv);
+
 					break;
 				}
 			}
-
-			var encryptedData = JSON.stringify(row.encryptedData).substring(1, JSON.stringify(row.encryptedData).length-1); //LITERALS!
-			var iv = JSON.stringify(row.init_vector).substring(1, JSON.stringify(row.init_vector).length-1); //LITERALS!
-
-			var decryptedFileKey = decryptRSA(encryptedFileKey, config.privateKey_mongo);
-			var decryptedData = decryptAES(encryptedData, decryptedFileKey, iv);
 
            	table += '<tr>';
            	//HASH
@@ -299,6 +339,13 @@ function getPageViewDatabase(res) {
             	table += '<td>' + decryptedData + '</td>';
             } else {
             	table += '<td><div class="label-danger">Nicht in Besitz</td>';
+            	table += '<td>';
+            	table += '<form action="/view-database" method="post">';
+            	table += '<input id="hash" name="hash" type="hidden" value="' + hash + '" />';
+				table += '<input class="btn btn-success btn" type="submit" value="Bestellversuch">';
+				table += '</form>';
+				table += '</td>';
+            	
             }
 			table += '</tr>';
 		}
@@ -595,7 +642,8 @@ async function chainQuery_blamings() {
 		"json": true,
 		"code": "reporting",
 		"scope": "reporting",
-		"table": "blaming"
+		"table": "blaming",
+		"reverse": true
 	});
 }
 async function chainQuery_items() {
@@ -607,6 +655,44 @@ async function chainQuery_items() {
 		"reverse": true
 	});
 }
+
+//async function chainQuery_items_byHash(hash) {
+
+	//does not work: https://github.com/EOSIO/eos/pull/6591
+/*
+	var bigdecimal = require("bigdecimal");
+	var test = new bigdecimal.BigInteger(hash, 16);
+	console.log("test is " + test)
+	var cast = "" + test
+	console.log("cast is " + cast)
+*/
+
+
+
+/*
+	return await rpc.get_table_rows({
+		"json": true,
+		"code": "reporting",
+		"scope": "reporting",
+		"table": "item",
+		"index_position": "secondary",
+		"key_type": "i256",
+		"table_key": "hash",
+//		"lower_bound": "0"
+		"lower_bound": cast,
+//		"lower_bound": "61828011910710924348669415050412667735216760368506506919547717188387879930867",
+//		"lower_bound": "1743020828462705188487869558027009851969899963644418487664399990829107528701",
+//		"lower_bound": "56633903395086234045294683378896435093179509379578815223498994661716340778500",
+//		"upper_bound": "61828011910710924348669415050412667735216760368506506919547717188387879930867"
+//		"lower_bound": hash.slice(hash.length/2)
+//		"lower_bound": "0x816489a8abba20314e4e11b99daa4bf3"
+//		"upper_bound": hash
+		"limit": 1
+	});*/
+//}
+
+
+
 async function chainQuery_orders() {
 	return await rpc.get_table_rows({
 		"json": true,
@@ -686,8 +772,7 @@ function chainTransaction_blame(blamed, reason, freeze) {
 	  });
 }
 function chainTransaction_buy(itemKey) {
-  	(async () => {
-	  const result = await api.transact({
+	  return api.transact({
 	    actions: [{
 	      account: 'reporting',
 	      name: 'buy',
@@ -705,7 +790,6 @@ function chainTransaction_buy(itemKey) {
 	    expireSeconds: 30,
 	  });
 	  console.dir(result);
-	})();
 }
 function chainTransaction_enrol() {
   	(async () => {
@@ -780,7 +864,7 @@ function chainTransaction_report(data, ancestor, incident) {
 	      }],
 	      data: {
 	        reporter: config.user,
-	        hash: data,
+	        data: data,
 	        parentLink: ancestor,
 	        isIncident: incident,
 	      },
