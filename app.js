@@ -57,7 +57,6 @@ app.listen(port, function () { console.log('App listening on port 8080!'); });
 
 //POST ENDPOINTS: MANAGE FORMS
 app.use(express.urlencoded({extended: true})); 
-//REPORT INCIDENT
 app.post('/report', (req,res) => {
 	console.log(req.body);
 	try {
@@ -134,8 +133,13 @@ app.post('/mypage', (req,res) => {
 		config.publicKey_mongo = publicKey;
 		config.passphrase_mongo = passphrase;
 		fs.writeFileSync(__dirname + '/config.json', JSON.stringify(config, null, 2));
+
+		databaseTransaction_publicKey(publicKey).then(function(result) {
+			getPageMypage(res, null, true);
+		}, function(err) { 
+			getPageMypage(res, err, false); 
+		});
 	}
-	getPageMypage(res);
 });
 app.post('/transfer', (req,res) => {
 	var promise = chainTransaction_transfer(req.body.to, req.body.amount);
@@ -151,12 +155,16 @@ app.post('/blame', (req,res) => {
 		promise = chainTransaction_blame(req.body.blamed, req.body.reason, true);
 	} else if (req.body.freeze == "unfreeze") {
 		promise = chainTransaction_blame(req.body.blamed, req.body.reason, false);
+	} else if (req.body.hasOwnProperty("confirmation-btn")) {
+		promise = chainTransaction_voteb(req.body.key, true);
+	} else if (req.body.hasOwnProperty("rejection-btn")) {
+		promise = chainTransaction_voteb(req.body.key, false);
 	}
 
 	promise.then( function(result) {
-		getPageBlame(res);
+		getPageBlame(res, null, true);
 	}, function(err) { 
-		getPageBlame(res, err);
+		getPageBlame(res, err, false);
 	});
 });
 app.post('/view-database', (req,res) => {
@@ -184,7 +192,97 @@ app.post('/view-database', (req,res) => {
 		getPageViewDatabase(res, err);
 	});
 });
+app.post('/view-blockchain', (req,res) => {
+	if(req.body.state == "accepted") {
+		var order = chainTransaction_buy(req.body.key);
+		order.then( function(result) {
+			getPageViewBlockchain(res, false, true);
+		}, function(err) { 
+			getPageViewBlockchain(res, err);
+		});
+	} else if(req.body.state == "voting") {
+		console.log(req.body.key + " " + req.body.merit)
+		var vote = chainTransaction_vote(req.body.key, req.body.merit);
+		vote.then( function(result) {
+			getPageViewBlockchain(res, false, true);
+		}, function(err) { 
+			getPageViewBlockchain(res, err);
+		});
+	}
+});
+app.post('/orders', (req,res) => {
 
+	if (req.body.hasOwnProperty("decrypt-btn")) {
+
+		console.log("User " + req.body.buyer + " bought item " + req.body.itemKey);
+
+		// 1. Download Incident from EOS with itemKey -> Getting Hash
+		// 2. Download Incident from DB  with hash 	  -> Getting encrypted FileKey of Seller
+		// 3. Decrypt fileKey 						  -> Getting decrypted FileKey
+		// 4. Download public Key from DB with user   -> Getting public key of buyer
+		// 5. Encrypt FileKey with public key of buyer-> Getting encrypted FileKey of Buyer
+		// 6. Modify Incident in DB with encrypted    -> Store encrypted FileKey of Buyer at the DB
+
+		//1.
+		var item = chainQuery_items_byKey(req.body.key);
+		item.then( function(result) {
+			var hash = JSON.stringify(result.rows[0].hash).substring(1, JSON.stringify(result.rows[0].hash).length-1);
+			console.log("Hash: " + hash);
+
+			//2.
+			var db_item_entry_raw = databaseQuery_item_byID(hash);
+			db_item_entry_raw.then( function(result) {
+				var encryptedFileKeys = result[0].fileKeys;
+				console.log(encryptedFileKeys);
+				var encryptedFileKey_user;
+				for (var i = 0; i < encryptedFileKeys.length; i++){
+					if (encryptedFileKeys[i].user != config.user) { continue; }
+					encryptedFileKey_user = encryptedFileKeys[i].encryptedFileKey;
+					break;
+				}
+				console.log(encryptedFileKey_user);
+
+				//3.
+				var decryptedFileKey = decryptRSA(encryptedFileKey_user, config.privateKey_mongo);
+				console.log(decryptedFileKey);
+
+				//4.
+				var db_publicKey_entry_raw = databaseQuery_publicKey_byUser(req.body.buyer);
+				db_publicKey_entry_raw.then( function(result) {
+					var publicKey_buyer = result[0].publicKey;
+					console.log("publicKey buyer: " + publicKey_buyer);
+
+					//5. 
+					var encryptedFileKey_buyer = encryptRSA(decryptedFileKey, publicKey_buyer);
+					console.log("encryptedFileKey buyer: " + encryptedFileKey_buyer);
+
+					//6.
+					var db_transaction = databaseTransaction_addEncryptedFileKey(hash, req.body.buyer, encryptedFileKey_buyer);
+					db_transaction.then( function(result) {
+						getPageOrders(res, false, true);
+
+					}, function(err) { getPageOrders(res, err, false); });
+				}, function(err) { getPageOrders(res, err, false); });
+			}, function(err) { getPageOrders(res, err, false); });
+		}, function(err) { getPageOrders(res, err, false); });
+		
+		getPageOrders(res, null, true);
+	} else {
+		var promise;
+		if (req.body.hasOwnProperty("confirmation-btn")) {
+			promise = chainTransaction_received(req.body.key, true);
+		} else if (req.body.hasOwnProperty("rejection-btn")) {
+			promise = chainTransaction_received(req.body.key, false);
+		}
+
+		promise.then( function(result) {
+			getPageOrders(res, null, true);
+		}, function(err) { 
+			getPageOrders(res, err, false);
+		});
+	}
+
+});
 
 
 //ASSEMBLE PAGES
@@ -216,21 +314,45 @@ function getPageReport(res, err, done) {
 
 	res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + report + '</body></html>');
 }
-function getPageViewBlockchain(res) {
+function getPageViewBlockchain(res, err, done) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
 	var view 		= fs.readFileSync(path + 'view-blockchain.html', 'utf8');
+
+	if(err) {
+		var message = "<div class='label-danger'>Interaktion fehlgeschlagen</div>" + err;
+		var view_error_dom = new jsdom.JSDOM(view);
+		var $ = jquery(view_error_dom.window);
+		$('p.error').html(message);
+		view = view_error_dom.serialize();
+	}
+	if(done) {
+		var message = "<div class='label-ok'>Interaktion erfolgreich</div>";
+		var view_error_dom = new jsdom.JSDOM(view);
+		var $ = jquery(view_error_dom.window);
+		$('p.error').html(message);
+		view = view_error_dom.serialize()
+	}
+
 
 	var items = chainQuery_items();
 	items.then( function(result) {
 
 		//assemble table
 		var table = '<table>';
-        table += '<tr><th>#</th><th>Hash</th><th>Typ</th><th>#-Link</th><th>Reporter</th><th>Rating</th><th>Voteable</th><th>Votes</th><th>BSI-OK</th></tr>'
+        table += '<tr><th>#</th><th>Hash</th><th>Typ</th><th>#-Link</th><th>Reporter</th><th>Rating</th><th>Voteable</th><th>Votes</th><th>BSI-OK</th><th>Aktion</th></tr>'
         for(var i = 0; i < result.rows.length; i++) {
             var row = result.rows[i];
             var text = ""; var label = "";
             table += '<tr>';
+
+			var state = "accepted";
+			if (JSON.stringify(row.voteable) == 1) { 
+				state = "voting"; 
+			}
+			if (JSON.stringify(row.rating) == 0 && JSON.stringify(row.voteable) == 0) { 
+				state = "failed"; 
+			}
 
             //key
             table += '<td>' + JSON.stringify(row.key) + '</td>';
@@ -247,10 +369,8 @@ function getPageViewBlockchain(res) {
             table += '<td>' + JSON.stringify(row.reporter).substring(1, JSON.stringify(row.reporter).length-1) + '</td>';
             //rating
             label = 'class="label-ok"';
-            if (JSON.stringify(row.rating) == 0 || JSON.stringify(row.voteable) == 1) { 
-                label = 'class="label-attention"'; 
-                if (JSON.stringify(row.voteable) == 0) { label = 'class="label-danger"'; }
-            }
+            if (state == "voting") { label = 'class="label-attention"'; }
+            if (state == "failed") { label = 'class="label-danger"'; }
             table += '<td><div ' + label + '>' + JSON.stringify(row.rating) + '</td>';
             //Voteable
             text = "Offen"; label = 'class="label-primary"';
@@ -263,6 +383,24 @@ function getPageViewBlockchain(res) {
             if (JSON.stringify(row.approval) == 0) { text = "<b>Keine Bewertung</b>"; label = 'class="label-attention"'; }
             table += '<td><div ' + label + '>' + text + '</div></td>';
 
+            //ACTION BUTTON
+            if(JSON.stringify(row.reporter).substring(1, JSON.stringify(row.reporter).length-1) != config.user) {
+				table += '<td>';
+	            table += '<form action="/view-blockchain" method="post">';
+	            table += '<input id="key" name="key" type="hidden" value="' + JSON.stringify(row.key) + '" />';
+	            table += '<input id="state" name="state" type="hidden" value="' + state + '" />';
+	            if (state == "accepted") {
+	            	table += '<input class="btn btn-primary btn-block" type="submit" value="Bestellen">';
+	            } else if (state == "voting") {
+	            	table += '<input id="merit" name="merit" type="number" min=0 max=1000 value=10 /> ';
+	            	table += '<input class="btn btn-primary btn" type="submit" value="Voten">';
+	            } else if(state == "failed") {
+	            	table += '<div class="label-danger">Abgelehnt</div>';
+	            }
+				table += '</form>';
+				table += '</td>'; 	
+            }
+          
             table += '</tr>';
         }
         table += '</table>';
@@ -304,7 +442,7 @@ function getPageViewDatabase(res, err, done) {
 		table += '<tr><th>Hash</th><th>Typ</th><th>Daten</th></tr>';
 		for(var i = 0; i < result.length; i++) {
 			var row = result[i];
-			console.log(row);
+			//console.log(row);
 			var text = ""; var label = "";
 
 			var encryptedFileKey, encryptedData, iv, decryptedFileKey, decryptedData;
@@ -339,12 +477,12 @@ function getPageViewDatabase(res, err, done) {
             	table += '<td>' + decryptedData + '</td>';
             } else {
             	table += '<td><div class="label-danger">Nicht in Besitz</td>';
-            	table += '<td>';
-            	table += '<form action="/view-database" method="post">';
-            	table += '<input id="hash" name="hash" type="hidden" value="' + hash + '" />';
-				table += '<input class="btn btn-success btn" type="submit" value="Bestellversuch">';
-				table += '</form>';
-				table += '</td>';
+				//table += '<td>';
+				//table += '<form action="/view-database" method="post">';
+				//table += '<input id="hash" name="hash" type="hidden" value="' + hash + '" />';
+				//table += '<input class="btn btn-success btn" type="submit" value="Bestellversuch">';
+				//table += '</form>';
+				//table += '</td>';
             	
             }
 			table += '</tr>';
@@ -367,40 +505,70 @@ function getPageVote(res) {
 	var vote 		= fs.readFileSync(path + 'vote.html', 'utf8');
 	res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + vote + '</body></html>');
 }
-function getPageOrders(res) {
+function getPageOrders(res, err, done) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
 	var orders 		= fs.readFileSync(path + 'orders.html', 'utf8');
 
+	if(err) {
+		var message = "<div class='label-danger'>Interaktion fehlgeschlagen</div>"+err;
+		var orders_error_dom = new jsdom.JSDOM(orders);
+		var $ = jquery(orders_error_dom.window);
+		$('p.error').html(message);
+		orders = orders_error_dom.serialize();
+	}
+	if(done) {
+		var message = "<div class='label-ok'>Interaktion erfolgreich</div>";
+		var orders_error_dom = new jsdom.JSDOM(orders);
+		var $ = jquery(orders_error_dom.window);
+		$('p.error').html(message);
+		orders = orders_error_dom.serialize()
+	}
+
 	var order_items = chainQuery_orders();
 	order_items.then( function(result) {
 
-		//assemble table_allOrders
-		var table_allOrders = '<table>';
-        table_allOrders += '<tr><th>#</th><th>#-Link</th><th>Käufer</th><th>Erhalten</th></tr>'
+		//assemble table_torelease
+		var table_torelease = '<table>';
+        table_torelease += '<tr><th>#</th><th>ItemLink</th><th>Käufer</th><th>Handlungsbedarf</th></tr>'
         for(var i = 0; i < result.rows.length; i++) {
             var row = result.rows[i];
             var text = ""; var label = "";
-            table_allOrders += '<tr>';
+
+			//only take the orders assigned to the user
+        	if(JSON.stringify(row.seller).substring(1, JSON.stringify(row.seller).length-1) != config.user) {
+        		continue;
+        	}
+
+            table_torelease += '<tr>';
 
             //key
-            table_allOrders += '<td>' + JSON.stringify(row.key) + '</td>';
+            table_torelease += '<td>' + JSON.stringify(row.key) + '</td>';
             //itemkey
-            table_allOrders += '<td>' + JSON.stringify(row.itemKey) + '</td>';
+            table_torelease += '<td>' + JSON.stringify(row.itemKey) + '</td>';
 			//buyer
-            table_allOrders += '<td>' + JSON.stringify(row.buyer).substring(1, JSON.stringify(row.buyer).length-1) + '</td>';
-            //received
-            text = "Ja"; label = 'class="label-ok"';
-            if (JSON.stringify(row.received) == 0) { text = "Nein"; label = 'class="label-danger"'; }
-            table_allOrders += '<td><div ' + label + '>' + text + '</div></td>';
+            table_torelease += '<td>' + JSON.stringify(row.buyer).substring(1, JSON.stringify(row.buyer).length-1) + '</td>';
 
-            table_allOrders += '</tr>';
+            //ACTION BUTTON
+            if (JSON.stringify(row.received) == 0) {
+				table_torelease += '<td>';
+	            table_torelease += '<form action="/orders" method="post">';
+	            table_torelease += '<input id="buyer" name="buyer" type="hidden" value="' + JSON.stringify(row.buyer).substring(1, JSON.stringify(row.buyer).length-1) + '" />';
+	            table_torelease += '<input id="itemKey" name="itemKey" type="hidden" value="' + JSON.stringify(row.itemKey) + '" />';
+	            table_torelease += '<input name="decrypt-btn" class="btn btn-primary btn-block" type="submit" value="Ja" />';
+				table_torelease += '</form>';
+				table_torelease += '</td>';
+            } else {
+            	table_torelease += '<td><div class="label-ok">Erledigt</div></td>';
+            }
+
+            table_torelease += '</tr>';
         }
-        table_allOrders += '</table>';
+        table_torelease += '</table>';
 
 		//assemble table_myOrders
 		var table_myOrders = '<table>';
-        table_myOrders += '<tr><th>#</th><th>#-Link</th><th>Käufer</th><th>Erhalten</th></tr>'
+        table_myOrders += '<tr><th>#</th><th>ItemLink</th><th>Käufer</th><th>Erhalten?</th></tr>'
         for(var i = 0; i < result.rows.length; i++) {
 			var row = result.rows[i];
 
@@ -418,10 +586,20 @@ function getPageOrders(res) {
             table_myOrders += '<td>' + JSON.stringify(row.itemKey) + '</td>';
 			//buyer
             table_myOrders += '<td>' + JSON.stringify(row.buyer).substring(1, JSON.stringify(row.buyer).length-1) + '</td>';
-            //received
-            text = "Ja"; label = 'class="label-ok"';
-            if (JSON.stringify(row.received) == 0) { text = "Nein"; label = 'class="label-danger"'; }
-            table_myOrders += '<td><div ' + label + '>' + text + '</div></td>';
+
+            //ACTION BUTTON
+            if (JSON.stringify(row.received) == 0) {
+				table_myOrders += '<td>';
+	            table_myOrders += '<form action="/orders" method="post">';
+	            table_myOrders += '<input id="key" name="key" type="hidden" value="' + JSON.stringify(row.key) + '" />';
+	            table_myOrders += '<input name="confirmation-btn" class="btn btn-success btn" type="submit" value="Ja"> ';
+	            table_myOrders += '<input name="rejection-btn" class="btn btn-danger btn" type="submit" value="Nein">';
+				table_myOrders += '</form>';
+				table_myOrders += '</td>';
+            } else {
+            	table_myOrders += '<td><div class="label-ok">Ja</div></td>';
+            }
+
 
             table_myOrders += '</tr>';
         }
@@ -430,7 +608,7 @@ function getPageOrders(res) {
         //place tables
 		var orders_dom = new jsdom.JSDOM(orders);
 		var $ = jquery(orders_dom.window);
-		$('p.allOrders').html(table_allOrders);
+		$('p.allOrders').html(table_torelease);
 		$('p.myOrders').html(table_myOrders);
 		orders = orders_dom.serialize();
 
@@ -489,24 +667,31 @@ function getPageTransfer(res, err) {
 		res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + transfer + '</body></html>');
 	}, function(err) { console.log(err); });
 }
-function getPageBlame(res, err) {
+function getPageBlame(res, err, done) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
 	var blame 		= fs.readFileSync(path + 'blame.html', 'utf8');
 
 	if(err) {
-		var message = "<div class='label-danger'>Antrag fehlgeschlagen</div>"+err;
+		var message = "<div class='label-danger'>Interaktion fehlgeschlagen</div>"+err;
 		var blame_error_dom = new jsdom.JSDOM(blame);
 		var $ = jquery(blame_error_dom.window);
 		$('p.error').html(message);
 		blame = blame_error_dom.serialize();
+	}
+	if(done) {
+		var message = "<div class='label-ok'>Interaktion erfolgreich</div>";
+		var blame_error_dom = new jsdom.JSDOM(blame);
+		var $ = jquery(blame_error_dom.window);
+		$('p.error').html(message);
+		blame = blame_error_dom.serialize()
 	}
 
 	var blamings = chainQuery_blamings();
 	blamings.then( function(result) {
 		//assemble table
 		var table = '<table>';
-        table += '<tr><th>#</th><th>Beschuldiger</th><th>Beschuldigter</th><th>Typ</th><th>Voteable</th><th>Begründung</th><th>Votes</th></tr>';
+        table += '<tr><th>#</th><th>Beschuldiger</th><th>Beschuldigter</th><th>Typ</th><th>Voteable</th><th>Begründung</th><th>Votes</th><th>Aktion</th></tr>';
         for(var i = 0; i < result.rows.length; i++) {
             var row = result.rows[i];
             var text = ""; var label = "";
@@ -531,6 +716,17 @@ function getPageBlame(res, err) {
             //confirmations/votes
             table += '<td>' + JSON.stringify(row.confirmations) + "/" + JSON.stringify(row.votes) + '</td>';
 
+            //ACTION BUTTON
+            if (JSON.stringify(row.voteable) == 1) {
+				table += '<td>';
+	            table += '<form action="/blame" method="post">';
+	            table += '<input id="key" name="key" type="hidden" value="' + JSON.stringify(row.key) + '" />';
+	            table += '<input name="confirmation-btn" class="btn btn-success btn" type="submit" value="Richtig"> ';
+	            table += '<input name="rejection-btn" class="btn btn-danger btn" type="submit" value="Falsch">';
+				table += '</form>';
+				table += '</td>';
+            }
+
             table += '</tr>';
         }
         table += '</table>';
@@ -545,10 +741,26 @@ function getPageBlame(res, err) {
 		res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + blame + '</body></html>');
 	}, function(err) { console.log(err); });
 }
-function getPageMypage(res) {
+function getPageMypage(res, err, done) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
 	var mypage 		= fs.readFileSync(path + 'mypage.html', 'utf8');
+
+	if(err) {
+		var message = "<div class='label-danger'>Schlüsselgenerierung fehlgeschlagen</div>"+err;
+		var mypage_error_dom = new jsdom.JSDOM(mypage);
+		var $ = jquery(mypage_error_dom.window);
+		$('p.error').html(message);
+		mypage = mypage_error_dom.serialize();
+	}
+	if(done) {
+		var message = "<div class='label-ok'>Schlüsselgenerierung erfolgreich</div>";
+		var mypage_error_dom = new jsdom.JSDOM(mypage);
+		var $ = jquery(mypage_error_dom.window);
+		$('p.error').html(message);
+		mypage = mypage_error_dom.serialize()
+	}
+
 	var account		= `<table>
 			<tr><td>EOSIO User</td><td>` + config.user + `</tr>
 			<tr><td>EOSIO Public Key</td><td>` + config.publicKey_eos.substr(0,5) + `...</tr>
@@ -589,8 +801,36 @@ function databaseQuery_item() {
 			const collection = db.collection('item');
 			collection.find({}).toArray( function(err, docs) { 
 				assert.equal(err, null);
-				console.log("Found the following records");
-				console.log(docs);
+				resolve(docs);
+			});
+			client.close();
+		});
+	});
+}
+function databaseQuery_item_byID(key) {
+	return new Promise(function(resolve, reject) {
+		MongoClient.connect(url_mongo, function(err, client) {
+			assert.equal(null, err);
+			console.log("Connected successfully to MongoDB Container");
+			const db = client.db('reporting');
+			const collection = db.collection('item');
+			collection.find({ _id: key }).toArray( function(err, docs) { 
+				assert.equal(err, null);
+				resolve(docs);
+			});
+			client.close();
+		});
+	});
+}
+function databaseQuery_publicKey_byUser(user) {
+	return new Promise(function(resolve, reject) {
+		MongoClient.connect(url_mongo, function(err, client) {
+			assert.equal(null, err);
+			console.log("Connected successfully to MongoDB Container");
+			const db = client.db('reporting');
+			const collection = db.collection('publicKey');
+			collection.find({ user: user }).toArray( function(err, docs) { 
+				assert.equal(err, null);
 				resolve(docs);
 			});
 			client.close();
@@ -632,6 +872,49 @@ function databaseTransaction_report(encryptedData, hashEncryptedData, encryptedF
 	  client.close();
 	});
 }
+function databaseTransaction_publicKey(publicKey) {
+	return new Promise(function(resolve, reject) {
+		MongoClient.connect(url_mongo, function(err, client) {
+			assert.equal(null, err);
+			console.log("Connected successfully to MongoDB Container");
+			const db = client.db('reporting');
+			const collection = db.collection('publicKey');
+			collection.insertOne({
+				user: config.user,
+				publicKey: publicKey
+			},
+				function(err, result) {
+					assert.equal(err, null);
+					assert.equal(1, result.result.n);
+					assert.equal(1, result.ops.length);
+					console.log("Inserted 1 publicKey into the publicKey collection");
+					resolve(result);
+				}
+			);
+		  client.close();
+		});
+	});
+}
+function databaseTransaction_addEncryptedFileKey(hash, user, encryptedFileKey) {
+	return new Promise(function(resolve, reject) {
+		MongoClient.connect(url_mongo, function(err, client) {
+			assert.equal(null, err);
+			console.log("Connected successfully to MongoDB Container");
+			const db = client.db('reporting');
+			const collection = db.collection('item');
+			collection.updateOne({ _id: hash }, { $push: {fileKeys: {encryptedFileKey: encryptedFileKey, user: user} } },
+				function(err, result) {
+					assert.equal(err, null);
+					assert.equal(1, result.result.n);
+					console.log("Inserted 1 encryptedFileKey into the items collection");
+					resolve(result);
+				}
+			);
+		  client.close();
+		});
+	});
+}
+
 
 
 
@@ -656,43 +939,21 @@ async function chainQuery_items() {
 	});
 }
 
-//async function chainQuery_items_byHash(hash) {
-
-	//does not work: https://github.com/EOSIO/eos/pull/6591
-/*
-	var bigdecimal = require("bigdecimal");
-	var test = new bigdecimal.BigInteger(hash, 16);
-	console.log("test is " + test)
-	var cast = "" + test
-	console.log("cast is " + cast)
-*/
-
-
-
-/*
+async function chainQuery_items_byKey(key) {
 	return await rpc.get_table_rows({
 		"json": true,
 		"code": "reporting",
 		"scope": "reporting",
 		"table": "item",
-		"index_position": "secondary",
-		"key_type": "i256",
-		"table_key": "hash",
-//		"lower_bound": "0"
-		"lower_bound": cast,
-//		"lower_bound": "61828011910710924348669415050412667735216760368506506919547717188387879930867",
-//		"lower_bound": "1743020828462705188487869558027009851969899963644418487664399990829107528701",
-//		"lower_bound": "56633903395086234045294683378896435093179509379578815223498994661716340778500",
-//		"upper_bound": "61828011910710924348669415050412667735216760368506506919547717188387879930867"
-//		"lower_bound": hash.slice(hash.length/2)
-//		"lower_bound": "0x816489a8abba20314e4e11b99daa4bf3"
-//		"upper_bound": hash
-		"limit": 1
-	});*/
-//}
-
-
-
+		"lower_bound": key,
+		"upper_bound": key,
+		"limit": 1,
+		"reverse": true
+	});
+}
+/*async function chainQuery_items_byHash(hash) {
+	secondary index does not work: https://github.com/EOSIO/eos/pull/6591
+}*/
 async function chainQuery_orders() {
 	return await rpc.get_table_rows({
 		"json": true,
@@ -830,9 +1091,8 @@ function chainTransaction_init() {
 	  console.dir(result);
 	})();
 }
-function chainTransaction_received(itemKey, done) {
-  	(async () => {
-	  const result = await api.transact({
+function chainTransaction_received(orderKey, done) {
+  	return api.transact({
 	    actions: [{
 	      account: 'reporting',
 	      name: 'received',
@@ -842,7 +1102,7 @@ function chainTransaction_received(itemKey, done) {
 	      }],
 	      data: {
 	        buyer: config.user,
-	        itemKey: itemKey,
+	        orderKey: orderKey,
 	        done: done,
 	      },
 	    }]
@@ -851,7 +1111,6 @@ function chainTransaction_received(itemKey, done) {
 	    expireSeconds: 30,
 	  });
 	  console.dir(result);
-	})();
 }
 function chainTransaction_report(data, ancestor, incident) {
 	  return api.transact({
@@ -896,8 +1155,7 @@ function chainTransaction_transfer(to, amount) {
 	  console.dir(result);
 }
 function chainTransaction_vote(itemKey, merit) {
-  	(async () => {
-	  const result = await api.transact({
+	  return api.transact({
 	    actions: [{
 	      account: 'reporting',
 	      name: 'vote',
@@ -915,12 +1173,9 @@ function chainTransaction_vote(itemKey, merit) {
 	    blocksBehind: 3,
 	    expireSeconds: 30,
 	  });
-	  console.dir(result);
-	})();
 }
 function chainTransaction_voteb(blameKey, value) {
-  	(async () => {
-	  const result = await api.transact({
+	return api.transact({
 	    actions: [{
 	      account: 'reporting',
 	      name: 'voteb',
@@ -938,8 +1193,6 @@ function chainTransaction_voteb(blameKey, value) {
 	    blocksBehind: 3,
 	    expireSeconds: 30,
 	  });
-	  console.dir(result);
-	})();
 }
 
 
