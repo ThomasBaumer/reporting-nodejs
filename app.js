@@ -134,7 +134,7 @@ app.post('/mypage', (req,res) => {
 		config.passphrase_mongo = passphrase;
 		fs.writeFileSync(__dirname + '/config.json', JSON.stringify(config, null, 2));
 
-		databaseTransaction_publicKey(publicKey).then(function(result) {
+		chainTransaction_updatepk(publicKey).then(function(result) {
 			getPageMypage(res, null, true);
 		}, function(err) { 
 			getPageMypage(res, err, false); 
@@ -219,7 +219,7 @@ app.post('/orders', (req,res) => {
 		// 1. Download Incident from EOS with itemKey -> Getting Hash
 		// 2. Download Incident from DB  with hash 	  -> Getting encrypted FileKey of Seller
 		// 3. Decrypt fileKey 						  -> Getting decrypted FileKey
-		// 4. Download public Key from DB with user   -> Getting public key of buyer
+		// 4. Download public Key from EOS with user  -> Getting public key of buyer
 		// 5. Encrypt FileKey with public key of buyer-> Getting encrypted FileKey of Buyer
 		// 6. Modify Incident in DB with encrypted    -> Store encrypted FileKey of Buyer at the DB
 
@@ -233,28 +233,28 @@ app.post('/orders', (req,res) => {
 			var db_item_entry_raw = databaseQuery_item_byID(hash);
 			db_item_entry_raw.then( function(result) {
 				var encryptedFileKeys = result[0].fileKeys;
-				console.log(encryptedFileKeys);
+				//console.log(encryptedFileKeys);
 				var encryptedFileKey_user;
 				for (var i = 0; i < encryptedFileKeys.length; i++){
 					if (encryptedFileKeys[i].user != config.user) { continue; }
 					encryptedFileKey_user = encryptedFileKeys[i].encryptedFileKey;
 					break;
 				}
-				console.log(encryptedFileKey_user);
+				//console.log(encryptedFileKey_user);
 
 				//3.
 				var decryptedFileKey = decryptRSA(encryptedFileKey_user, config.privateKey_mongo);
-				console.log(decryptedFileKey);
+				//console.log(decryptedFileKey);
 
 				//4.
-				var db_publicKey_entry_raw = databaseQuery_publicKey_byUser(req.body.buyer);
-				db_publicKey_entry_raw.then( function(result) {
-					var publicKey_buyer = result[0].publicKey;
-					console.log("publicKey buyer: " + publicKey_buyer);
+				var buyer_entry_eos = chainQuery_users_byUser(req.body.buyer);
+				buyer_entry_eos.then( function(result) {
+					var publicKey_buyer = result.rows[0].publicKey;
+					//console.log("publicKey buyer: " + publicKey_buyer);
 
 					//5. 
 					var encryptedFileKey_buyer = encryptRSA(decryptedFileKey, publicKey_buyer);
-					console.log("encryptedFileKey buyer: " + encryptedFileKey_buyer);
+					//console.log("encryptedFileKey buyer: " + encryptedFileKey_buyer);
 
 					//6.
 					var db_transaction = databaseTransaction_addEncryptedFileKey(hash, req.body.buyer, encryptedFileKey_buyer);
@@ -970,6 +970,16 @@ async function chainQuery_users() {
 		"table": "users"
 	});
 }
+async function chainQuery_users_byUser(user) {
+	return await rpc.get_table_rows({
+		"json": true,
+		"code": "reporting",
+		"scope": "reporting",
+		"table": "users",
+		"lower_bound": user,
+		"limit": 1
+	});
+}
 async function chainQuery_votings() {
 	return await rpc.get_table_rows({
 		"json": true,
@@ -1153,6 +1163,25 @@ function chainTransaction_transfer(to, amount) {
 	    expireSeconds: 30,
 	  });
 	  console.dir(result);
+}
+function chainTransaction_updatepk(publicKey) {
+	  return api.transact({
+	    actions: [{
+	      account: 'reporting',
+	      name: 'updatepk',
+	      authorization: [{
+	        actor: config.user,
+	        permission: 'active',
+	      }],
+	      data: {
+	        user: config.user,
+	        publicKey: publicKey,
+	      },
+	    }]
+	  }, {
+	    blocksBehind: 3,
+	    expireSeconds: 30,
+	  });
 }
 function chainTransaction_vote(itemKey, merit) {
 	  return api.transact({
