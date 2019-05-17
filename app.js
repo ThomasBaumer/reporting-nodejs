@@ -61,13 +61,23 @@ app.post('/report', (req,res) => {
 	console.log(req.body);
 	try {
 		var isIncident = true; if (req.body.itemType == "datamining") { isIncident = false; }
-		var data, ancestor;
+		var title, description, industry, data, ancestor, price, reward;
 		if(isIncident) {
+			title		= req.body.incidentTitle;
+			description = req.body.incidentDesc;
 			data 		= req.body.incidentData;
 			ancestor 	= req.body.incidentAncestor;
+			price 		= req.body.incidentPrice;
+			reward		= req.body.incidentReward;
+			industry	= req.body.incidentIndustry;
 		} else {
+			title		= req.body.dataminingTitle;
+			description = req.body.dataminingDesc;
 			data 		= req.body.dataminingData;
 			ancestor 	= req.body.dataminingAncestor;
+			price 		= req.body.dataminingPrice;
+			reward		= req.body.dataminingReward;
+			industry	= req.body.dataminingIndustry;
 		}
 
 		//encrypt data
@@ -100,8 +110,8 @@ app.post('/report', (req,res) => {
 			throw "Fehlerhafter Verschlüsselung";
 		}
 
-		databaseTransaction_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, iv, isIncident);
-		var report_chain_promise = chainTransaction_report(encryptedData, ancestor, isIncident);
+		databaseTransaction_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, iv, isIncident, title, description, industry);
+		var report_chain_promise = chainTransaction_report(encryptedData, ancestor, isIncident, price, reward);
 		report_chain_promise.then( function(result) {
 			getPageReport(res, false, true);
 		}, function(err) { 
@@ -193,17 +203,65 @@ app.post('/view-database', (req,res) => {
 	});
 });
 app.post('/view-blockchain', (req,res) => {
-	if(req.body.state == "accepted") {
-		var order = chainTransaction_buy(req.body.key);
-		order.then( function(result) {
-			getPageViewBlockchain(res, false, true);
-		}, function(err) { 
-			getPageViewBlockchain(res, err);
-		});
-	} else if(req.body.state == "voting") {
-		console.log(req.body.key + " " + req.body.merit)
-		var vote = chainTransaction_vote(req.body.key, req.body.merit);
-		vote.then( function(result) {
+
+	if(req.body.hasOwnProperty("setvoters-btn")) {
+		var selectedVoters = chainTransaction_selectvoter(req.body.key);
+		selectedVoters.then( function(result) {
+
+			var hash = req.body.hash;
+	        var db_item_entry_raw = databaseQuery_item_byID(hash);
+	        db_item_entry_raw.then( function(result) {
+				var encryptedFileKeys = result[0].fileKeys;
+				var encryptedFileKey_user;
+				for (var i = 0; i < encryptedFileKeys.length; i++){
+					if (encryptedFileKeys[i].user != config.user) { continue; }
+					encryptedFileKey_user = encryptedFileKeys[i].encryptedFileKey;
+					break;
+				}
+				var decryptedFileKey = decryptRSA(encryptedFileKey_user, config.privateKey_mongo);
+
+				var applications = chainQuery_applications();
+				applications.then( function(result) {
+					var applicants = [];
+					for(var i = 0; i < result.rows.length; i++) {
+		            	var row = result.rows[i];
+		            	if(row.itemKey == req.body.key && row.active == 1) {
+		            		var applicant = JSON.stringify(row.applicant).substring(1, JSON.stringify(row.applicant).length-1);
+		            		applicants.push(applicant);
+		            	}
+		            }
+		            console.log(applicants.toString());
+
+		            var users = chainQuery_users();
+					users.then( function(result) {
+						applicants.forEach(function(element) {
+							for(var i = 0; i < result.rows.length; i++) {
+			            		var row = result.rows[i];
+			            		if(row.user == element) {
+			            			var encryptedFileKey_applicant = encryptRSA(decryptedFileKey, row.publicKey);
+			            			console.log("\n\napplicant: " + element + "\n encryptedFileKey_applicant: " + encryptedFileKey_applicant);
+			            			databaseTransaction_addEncryptedFileKey(hash, element, encryptedFileKey_applicant);
+			            		}
+		            		}
+						});				
+						getPageViewBlockchain(res, false, true);
+		            }, function(err) { getPageViewBlockchain(res, err); });
+				}, function(err) { getPageViewBlockchain(res, err); });
+			}, function(err) { getPageViewBlockchain(res, err); });
+		}, function(err) { getPageViewBlockchain(res, err); });
+
+	} else {
+		var promise;
+		if(req.body.hasOwnProperty("apply-btn")) {
+			promise = chainTransaction_apply(req.body.key);
+		} else if(req.body.hasOwnProperty("vote-btn")) { 
+			promise = chainTransaction_vote(req.body.key, req.body.overall, req.body.description, req.body.service, req.body.quality);
+		} else if(req.body.hasOwnProperty("order-btn")) {
+			promise = chainTransaction_buy(req.body.key);
+		} else if(req.body.hasOwnProperty("price-btn")) {
+			promise = chainTransaction_updateprice(req.body.key, req.body.price);
+		}
+		promise.then( function(result) {
 			getPageViewBlockchain(res, false, true);
 		}, function(err) { 
 			getPageViewBlockchain(res, err);
@@ -214,53 +272,45 @@ app.post('/orders', (req,res) => {
 
 	if (req.body.hasOwnProperty("decrypt-btn")) {
 
-		console.log("User " + req.body.buyer + " bought item " + req.body.itemKey);
-
 		// 1. Download Incident from EOS with itemKey -> Getting Hash
 		// 2. Download Incident from DB  with hash 	  -> Getting encrypted FileKey of Seller
 		// 3. Decrypt fileKey 						  -> Getting decrypted FileKey
 		// 4. Download public Key from EOS with user  -> Getting public key of buyer
 		// 5. Encrypt FileKey with public key of buyer-> Getting encrypted FileKey of Buyer
 		// 6. Modify Incident in DB with encrypted    -> Store encrypted FileKey of Buyer at the DB
+		// 7. Modify EOS state 					      -> Update Metadata
 
 		//1.
 		var item = chainQuery_items_byKey(req.body.key);
 		item.then( function(result) {
 			var hash = JSON.stringify(result.rows[0].hash).substring(1, JSON.stringify(result.rows[0].hash).length-1);
-			console.log("Hash: " + hash);
-
 			//2.
 			var db_item_entry_raw = databaseQuery_item_byID(hash);
 			db_item_entry_raw.then( function(result) {
 				var encryptedFileKeys = result[0].fileKeys;
-				//console.log(encryptedFileKeys);
 				var encryptedFileKey_user;
 				for (var i = 0; i < encryptedFileKeys.length; i++){
 					if (encryptedFileKeys[i].user != config.user) { continue; }
 					encryptedFileKey_user = encryptedFileKeys[i].encryptedFileKey;
 					break;
 				}
-				//console.log(encryptedFileKey_user);
-
 				//3.
 				var decryptedFileKey = decryptRSA(encryptedFileKey_user, config.privateKey_mongo);
-				//console.log(decryptedFileKey);
-
 				//4.
 				var buyer_entry_eos = chainQuery_users_byUser(req.body.buyer);
 				buyer_entry_eos.then( function(result) {
 					var publicKey_buyer = result.rows[0].publicKey;
-					//console.log("publicKey buyer: " + publicKey_buyer);
-
 					//5. 
 					var encryptedFileKey_buyer = encryptRSA(decryptedFileKey, publicKey_buyer);
-					//console.log("encryptedFileKey buyer: " + encryptedFileKey_buyer);
-
 					//6.
 					var db_transaction = databaseTransaction_addEncryptedFileKey(hash, req.body.buyer, encryptedFileKey_buyer);
 					db_transaction.then( function(result) {
-						getPageOrders(res, false, true);
+						//7.
+						var set_chain_state = chainTransaction_sent(req.body.orderKey);
+						set_chain_state.then( function(result) {
+							getPageOrders(res, null, true);
 
+						}, function(err) { getPageOrders(res, err, false); });
 					}, function(err) { getPageOrders(res, err, false); });
 				}, function(err) { getPageOrders(res, err, false); });
 			}, function(err) { getPageOrders(res, err, false); });
@@ -281,7 +331,6 @@ app.post('/orders', (req,res) => {
 			getPageOrders(res, err, false);
 		});
 	}
-
 });
 
 
@@ -339,20 +388,27 @@ function getPageViewBlockchain(res, err, done) {
 	items.then( function(result) {
 
 		//assemble table
-		var table = '<table>';
-        table += '<tr><th>#</th><th>Hash</th><th>Typ</th><th>#-Link</th><th>Reporter</th><th>Rating</th><th>Voteable</th><th>Votes</th><th>BSI-OK</th><th>Aktion</th></tr>'
+		var table = '<table class="table table-hover table-dark">';
+        table += '<tr><th>#</th><th>Hash</th><th>Typ</th><th>#-Link</th><th>Reporter</th><th>Rating</th><th>Preis</th><th>Belohnung</th><th>Status</th><th>Votes</th><th>BSI-OK</th><th>Aktion</th></tr>'
         for(var i = 0; i < result.rows.length; i++) {
             var row = result.rows[i];
             var text = ""; var label = "";
             table += '<tr>';
 
 			var state = "accepted";
+			if (JSON.stringify(row.appliable) == 1) {
+				state = "application";
+			}
+			if (JSON.stringify(row.setvoters) == 1) {
+				state = "setvoters";
+			}
 			if (JSON.stringify(row.voteable) == 1) { 
 				state = "voting"; 
 			}
-			if (JSON.stringify(row.rating) == 0 && JSON.stringify(row.voteable) == 0) { 
+			if (JSON.stringify(row.rating) == 0 && JSON.stringify(row.appliable) == 0 && JSON.stringify(row.setvoters) == 0 && JSON.stringify(row.voteable) == 0) { 
 				state = "failed"; 
 			}
+
 
             //key
             table += '<td>' + JSON.stringify(row.key) + '</td>';
@@ -367,15 +423,46 @@ function getPageViewBlockchain(res, err, done) {
             table += '<td>' + JSON.stringify(row.parentLink) + '</td>';
             //reporter
             table += '<td>' + JSON.stringify(row.reporter).substring(1, JSON.stringify(row.reporter).length-1) + '</td>';
+
             //rating
-            label = 'class="label-ok"';
-            if (state == "voting") { label = 'class="label-attention"'; }
-            if (state == "failed") { label = 'class="label-danger"'; }
-            table += '<td><div ' + label + '>' + JSON.stringify(row.rating) + '</td>';
-            //Voteable
-            text = "Offen"; label = 'class="label-primary"';
-            if (JSON.stringify(row.voteable) == 0) { text = "<b>Abgeschlossen</b>"; label = 'class="label-secondary"'; }
+            label = 'class="label-attention"'; 
+            text = 'schwebend';
+            if (state == "accepted") {
+            	label = 'class="label-ok"'; 
+            	var rating 		= JSON.stringify(row.rating).substring(1, JSON.stringify(row.rating).length-1);
+
+            	var quality 	= rating.substring(JSON.stringify(row.rating).length-5, JSON.stringify(row.rating).length); 
+            	var service 	= rating.substring(JSON.stringify(row.rating).length-8, JSON.stringify(row.rating).length-5); 
+            	var description = rating.substring(JSON.stringify(row.rating).length-11, JSON.stringify(row.rating).length-8);
+            	var overall 	= rating.substring(JSON.stringify(row.rating).length-14, JSON.stringify(row.rating).length-11);
+            	text = 'Gesamt: ' + overall + '<br>Beschreibung: ' + description + '<br>Service: ' + service + '<br>Qualität: ' + quality; 
+            }
+            if (state == "failed") { 
+            	label = 'class="label-danger"'; 
+            	text = "Flop"; 
+            }
             table += '<td><div ' + label + '>' + text + '</div></td>';
+
+            //price
+            table += '<td><div class="label-primary">' + JSON.stringify(row.price) + '</div></td>';
+            //reward
+            table += '<td><div class="label-primary">' + JSON.stringify(row.reward) + '</div></td>';
+
+            //Status
+            if (state == "accepted" || "failed") {
+            	text = "Abgeschlossen"; label = 'class="label-secondary"';
+            }
+            if (state == "application") {
+            	text = "Bewerbung"; label = 'class="label-ok"';
+            }
+            if (state == "setvoters") {
+            	text = "Planung Voting "; label = 'class="label-primary"';
+            }
+            if (state == "voting") {
+            	text = "Voting "; label = 'class="label-attention"';
+            }
+            table += '<td><div ' + label + '>' + text + '</div></td>';
+
             //Confirmations/Votes
             table += '<td>' + JSON.stringify(row.confirmations) + "/" + JSON.stringify(row.votes) + '</td>';
             //BSI-OK
@@ -384,22 +471,35 @@ function getPageViewBlockchain(res, err, done) {
             table += '<td><div ' + label + '>' + text + '</div></td>';
 
             //ACTION BUTTON
-            if(JSON.stringify(row.reporter).substring(1, JSON.stringify(row.reporter).length-1) != config.user) {
-				table += '<td>';
-	            table += '<form action="/view-blockchain" method="post">';
-	            table += '<input id="key" name="key" type="hidden" value="' + JSON.stringify(row.key) + '" />';
-	            table += '<input id="state" name="state" type="hidden" value="' + state + '" />';
-	            if (state == "accepted") {
-	            	table += '<input class="btn btn-primary btn-block" type="submit" value="Bestellen">';
-	            } else if (state == "voting") {
-	            	table += '<input id="merit" name="merit" type="number" min=0 max=1000 value=10 /> ';
-	            	table += '<input class="btn btn-primary btn" type="submit" value="Voten">';
-	            } else if(state == "failed") {
-	            	table += '<div class="label-danger">Abgelehnt</div>';
-	            }
-				table += '</form>';
-				table += '</td>'; 	
+            table += '<td>';
+            if (state == "failed") {
+            	table += '<div class="label-danger">Mangelhaftes Rating</div>';
+            } else {
+            	table += '<form action="/view-blockchain" method="post">';
+		        table += '<input id="key" name="key" type="hidden" value="' + JSON.stringify(row.key) + '" />';
+            	if (JSON.stringify(row.reporter).substring(1, JSON.stringify(row.reporter).length-1) == config.user) {
+	            	if(state == "setvoters") {
+	            		table += '<input id="hash" name="hash" type="hidden" value="' + hash + '" />';
+	            		table += '<input name="setvoters-btn" class="btn btn-success btn-sm btn-block" type="submit" value="Voting planen" style="margin-bottom:5px">';
+	            	}
+            		table += '<input id="price" name="price" type="number" min=0 max=1000 value=10 /> ';
+	            	table += '<input name= "price-btn" class="btn btn-danger btn-sm" type="submit" value="Preis setzen">';
+            	} else {
+            		if(state == "accepted") {
+            			table += '<input name="order-btn" class="btn btn-primary btn-sm btn-block" type="submit" value="Bestellen">';
+            		} else if (state == "voting") {
+		            	table += '<label>Gesamt</label><input id="overall" name="overall" type="number" min=0 max=99 value=10 style="float:right;" /><br>';
+		            	table += '<label>Beschreibung</label><input id="description" name="description" type="number" min=0 max=99 value=10 style="float:right;" /><br>';
+		            	table += '<label>Service</label><input id="service" name="service" type="number" min=0 max=99 value=10 style="float:right;" /><br>';
+		            	table += '<label>Qualität</label><input id="quality" name="quality" type="number" min=0 max=99 value=10 style="float:right;" />';
+		            	table += '<input name="vote-btn" class="btn btn-primary btn-sm btn-block" type="submit" value="Voten">';
+		            } else if (state == "application") { 
+		            	table += '<input name="apply-btn" class="btn btn-success btn-sm btn-block" type="submit" value="Bewerben">';
+		            }            	
+		        }
+            	table += '</form>';
             }
+            table += '</td>';
           
             table += '</tr>';
         }
@@ -438,8 +538,8 @@ function getPageViewDatabase(res, err, done) {
 
 	items.then( function(result) {
 		//assemble table
-		var table = '<table>';
-		table += '<tr><th>Hash</th><th>Typ</th><th>Daten</th></tr>';
+		var table = '<table class="table table-hover table-dark">';
+		table += '<tr><th>Titel</th><th>Beschreibung</th><th>Branche</th><th>Hash</th><th>Typ</th><th>Daten</th></tr>';
 		for(var i = 0; i < result.length; i++) {
 			var row = result[i];
 			//console.log(row);
@@ -463,6 +563,12 @@ function getPageViewDatabase(res, err, done) {
 			}
 
            	table += '<tr>';
+           	//TITEL
+			table += '<td>' + JSON.stringify(row.title).substring(1, JSON.stringify(row.title).length-1); + '</td>';
+			//BESCHREIBUNG
+			table += '<td>' + JSON.stringify(row.description).substring(1, JSON.stringify(row.description).length-1); + '</td>';
+			//BRANCHE
+			table += '<td>' + JSON.stringify(row.industry).substring(1, JSON.stringify(row.industry).length-1); + '</td>';
            	//HASH
             var hash = JSON.stringify(row._id).substring(1, JSON.stringify(row._id).length-1);
            	table += '<td>' + hash.slice(0, hash.length/2) + '<br>' + hash.slice(hash.length/2) + '</td>';
@@ -530,7 +636,7 @@ function getPageOrders(res, err, done) {
 
 		//assemble table_torelease
 		var table_torelease = '<table>';
-        table_torelease += '<tr><th>#</th><th>ItemLink</th><th>Käufer</th><th>Handlungsbedarf</th></tr>'
+        table_torelease += '<tr><th>#</th><th>ItemLink</th><th>Käufer</th><th>Info/Aktion</th></tr>'
         for(var i = 0; i < result.rows.length; i++) {
             var row = result.rows[i];
             var text = ""; var label = "";
@@ -550,16 +656,21 @@ function getPageOrders(res, err, done) {
             table_torelease += '<td>' + JSON.stringify(row.buyer).substring(1, JSON.stringify(row.buyer).length-1) + '</td>';
 
             //ACTION BUTTON
-            if (JSON.stringify(row.received) == 0) {
+            if (JSON.stringify(row.sent) == 0) {
 				table_torelease += '<td>';
 	            table_torelease += '<form action="/orders" method="post">';
 	            table_torelease += '<input id="buyer" name="buyer" type="hidden" value="' + JSON.stringify(row.buyer).substring(1, JSON.stringify(row.buyer).length-1) + '" />';
 	            table_torelease += '<input id="itemKey" name="itemKey" type="hidden" value="' + JSON.stringify(row.itemKey) + '" />';
-	            table_torelease += '<input name="decrypt-btn" class="btn btn-primary btn-block" type="submit" value="Ja" />';
+	            table_torelease += '<input id="orderKey" name="orderKey" type="hidden" value="' + JSON.stringify(row.key) + '" />';
+	            table_torelease += '<input name="decrypt-btn" class="btn btn-primary btn-sm btn-block" type="submit" value="Auftrag erfüllen" />';
 				table_torelease += '</form>';
 				table_torelease += '</td>';
             } else {
-            	table_torelease += '<td><div class="label-ok">Erledigt</div></td>';
+            	if (JSON.stringify(row.received) == 0) {
+            		table_torelease += '<td><div class="label-attention">Bestätigung ausstehend</div></td>';
+            	} else {
+            		table_torelease += '<td><div class="label-ok">Erledigt</div></td>';
+            	}
             }
 
             table_torelease += '</tr>';
@@ -840,7 +951,7 @@ function databaseQuery_publicKey_byUser(user) {
 
 
 //DATABASE TRANSACTIONS
-function databaseTransaction_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, init_vector, isIncident) {
+function databaseTransaction_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, init_vector, isIncident, title, description, industry) {
 	MongoClient.connect(url_mongo, function(err, client) {
 		assert.equal(null, err);
 		console.log("Connected successfully to MongoDB Container");
@@ -860,7 +971,10 @@ function databaseTransaction_report(encryptedData, hashEncryptedData, encryptedF
 				}
 			],
 			init_vector:init_vector,
-			itemType:isIncident
+			itemType:isIncident,
+			title:title, 
+			description:description,
+			industry:industry
 		},
 			function(err, result) {
 				assert.equal(err, null);
@@ -870,29 +984,6 @@ function databaseTransaction_report(encryptedData, hashEncryptedData, encryptedF
 			}
 		);
 	  client.close();
-	});
-}
-function databaseTransaction_publicKey(publicKey) {
-	return new Promise(function(resolve, reject) {
-		MongoClient.connect(url_mongo, function(err, client) {
-			assert.equal(null, err);
-			console.log("Connected successfully to MongoDB Container");
-			const db = client.db('reporting');
-			const collection = db.collection('publicKey');
-			collection.insertOne({
-				user: config.user,
-				publicKey: publicKey
-			},
-				function(err, result) {
-					assert.equal(err, null);
-					assert.equal(1, result.result.n);
-					assert.equal(1, result.ops.length);
-					console.log("Inserted 1 publicKey into the publicKey collection");
-					resolve(result);
-				}
-			);
-		  client.close();
-		});
 	});
 }
 function databaseTransaction_addEncryptedFileKey(hash, user, encryptedFileKey) {
@@ -920,6 +1011,15 @@ function databaseTransaction_addEncryptedFileKey(hash, user, encryptedFileKey) {
 
 
 //CHAIN QUERY
+async function chainQuery_applications() {
+	return await rpc.get_table_rows({
+		"json": true,
+		"code": "reporting",
+		"scope": "reporting",
+		"table": "application",
+		"limit": 100
+	});
+}
 async function chainQuery_blamings() {
 	return await rpc.get_table_rows({
 		"json": true,
@@ -938,7 +1038,6 @@ async function chainQuery_items() {
 		"reverse": true
 	});
 }
-
 async function chainQuery_items_byKey(key) {
 	return await rpc.get_table_rows({
 		"json": true,
@@ -1000,6 +1099,25 @@ async function chainQuery_votingbs() {
 
 
 //CHAIN TRANACTIONS
+function chainTransaction_apply(itemKey) {
+	  return api.transact({
+	    actions: [{
+	      account: 'reporting',
+	      name: 'apply',
+	      authorization: [{
+	        actor: config.user,
+	        permission: 'active',
+	      }],
+	      data: {
+	        itemKey: itemKey,
+	        applicant: config.user,
+	      },
+	    }]
+	  }, {
+	    blocksBehind: 3,
+	    expireSeconds: 30,
+	  });
+}
 function chainTransaction_approve(itemKey) {
   	(async () => {
 	  const result = await api.transact({
@@ -1122,7 +1240,7 @@ function chainTransaction_received(orderKey, done) {
 	  });
 	  console.dir(result);
 }
-function chainTransaction_report(data, ancestor, incident) {
+function chainTransaction_report(data, ancestor, incident, price, reward) {
 	  return api.transact({
 	    actions: [{
 	      account: 'reporting',
@@ -1136,6 +1254,48 @@ function chainTransaction_report(data, ancestor, incident) {
 	        data: data,
 	        parentLink: ancestor,
 	        isIncident: incident,
+	        price: price,
+	        reward: reward,
+	      },
+	    }]
+	  }, {
+	    blocksBehind: 3,
+	    expireSeconds: 30,
+	  });
+}
+function chainTransaction_selectvoter(itemKey) {
+	var nonce = parseInt("0x"+getCryptoRandom(5));
+	  return api.transact({
+	    actions: [{
+	      account: 'reporting',
+	      name: 'selectvoter',
+	      authorization: [{
+	        actor: config.user,
+	        permission: 'active',
+	      }],
+	      data: {
+	        reporter: config.user,
+	        itemKey: itemKey,
+	        nonce: nonce,
+	      },
+	    }]
+	  }, {
+	    blocksBehind: 3,
+	    expireSeconds: 30,
+	  });
+}
+function chainTransaction_sent(orderKey) {
+	  return api.transact({
+	    actions: [{
+	      account: 'reporting',
+	      name: 'sent',
+	      authorization: [{
+	        actor: config.user,
+	        permission: 'active',
+	      }],
+	      data: {
+	        seller: config.user,
+	        orderKey: orderKey,
 	      },
 	    }]
 	  }, {
@@ -1183,7 +1343,27 @@ function chainTransaction_updatepk(publicKey) {
 	    expireSeconds: 30,
 	  });
 }
-function chainTransaction_vote(itemKey, merit) {
+function chainTransaction_updateprice(itemKey, price) {
+	  return api.transact({
+	    actions: [{
+	      account: 'reporting',
+	      name: 'updateprice',
+	      authorization: [{
+	        actor: config.user,
+	        permission: 'active',
+	      }],
+	      data: {
+	        reporter: config.user,
+	        itemKey: itemKey,
+	        price: price,
+	      },
+	    }]
+	  }, {
+	    blocksBehind: 3,
+	    expireSeconds: 30,
+	  });
+}
+function chainTransaction_vote(itemKey, overall, description, service, quality) {
 	  return api.transact({
 	    actions: [{
 	      account: 'reporting',
@@ -1195,8 +1375,11 @@ function chainTransaction_vote(itemKey, merit) {
 	      data: {
 	        itemKey: itemKey,
 	        voter: config.user,
-	        merit: merit,
-	      },
+	        overall: overall,
+	        description: description,
+	        service: service,
+	        quality: quality,
+		  },
 	    }]
 	  }, {
 	    blocksBehind: 3,
