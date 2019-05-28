@@ -61,7 +61,7 @@ app.post('/report', (req,res) => {
 	console.log(req.body);
 	try {
 		var isIncident = true; if (req.body.itemType == "datamining") { isIncident = false; }
-		var title, description, industry, data, ancestor, price, reward;
+		var title, description, industry, data, ancestor, price, reward, bsig;
 		if(isIncident) {
 			title		= req.body.incidentTitle;
 			description = req.body.incidentDesc;
@@ -70,6 +70,7 @@ app.post('/report', (req,res) => {
 			price 		= req.body.incidentPrice;
 			reward		= req.body.incidentReward;
 			industry	= req.body.incidentIndustry;
+			bsig 		= req.body.incidentBSIG;
 		} else {
 			title		= req.body.dataminingTitle;
 			description = req.body.dataminingDesc;
@@ -78,45 +79,38 @@ app.post('/report', (req,res) => {
 			price 		= req.body.dataminingPrice;
 			reward		= req.body.dataminingReward;
 			industry	= req.body.dataminingIndustry;
+			bsig 		= req.body.dataminingBSIG;
 		}
 
 		//encrypt data
 		var fileKey = crypto.randomBytes(32);
-		//var fileKey_base64 = Buffer.from(fileKey, 'utf8').toString('base64');publicKey_mongo_BSI
 		var encryptedFileKey = encryptRSA(fileKey, config.publicKey_mongo);
-		var encryptedFileKeyBSI = encryptRSA(fileKey, config.publicKey_mongo_BSI);
 		var { iv, encryptedData } = encryptAES(data, fileKey);
 		var hashEncryptedData = hashSHA256(encryptedData);
 
-		/*console.log("fileKey: " + fileKey);
-		console.log("fileKey_base64: " + fileKey_base64);
-		console.log("encryptedFileKey: " + encryptedFileKey);
-		console.log("iv: " + iv);
-		console.log("encryptedData: " + encryptedData);
-		console.log("hashEncryptedData: " + hashEncryptedData);
-
-		console.log("-------------");*/
+		var encryptedFileKeyBSI;
+		if(bsig) { encryptedFileKeyBSI = encryptRSA(fileKey, config.publicKey_mongo_BSI); }
 
 		//decrypt data
 		var decryptedFileKey = decryptRSA(encryptedFileKey, config.privateKey_mongo);
-		//var decryptedFileKey_base64 = Buffer.from(decryptedFileKey, 'base64').toString('base64');
 		var decryptedData = decryptAES(encryptedData, decryptedFileKey, iv);
-
-		/*console.log("decryptedFileKey: " + decryptedFileKey);
-		console.log("decryptedFileKey_base64: " + decryptedFileKey_base64);
-		console.log("decryptedData: " + decryptedData);*/
 
 		if(decryptedData != data) {
 			throw "Fehlerhafter Verschlüsselung";
 		}
 
-		databaseTransaction_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, iv, isIncident, title, description, industry);
-		var report_chain_promise = chainTransaction_report(encryptedData, ancestor, isIncident, price, reward);
-		report_chain_promise.then( function(result) {
-			getPageReport(res, false, true);
-		}, function(err) { 
-			getPageReport(res, err);
-		});
+		var report_db_promise = databaseTransaction_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, iv, isIncident, title, description, industry, bsig);
+		report_db_promise.then( function(result) {
+
+			//var report_chain_promise = chainTransaction_report(encryptedData, ancestor, isIncident, price, reward);
+			var report_chain_promise = chainTransaction_report(hashEncryptedData, ancestor, isIncident, price, reward);
+			report_chain_promise.then( function(result) {
+				getPageReport(res, false, true);
+
+			}, function(err) { getPageReport(res, err); });
+		}, function(err) { getPageReport(res, err); });
+		
+
 	} catch (e) {
 		getPageReport(res, "FEHLER: Meldung war nicht erfolgreich. Verschlüsselung oder Blockchain/Datenbank Transaktion schlug fehl.", true);
 	}
@@ -175,31 +169,6 @@ app.post('/blame', (req,res) => {
 		getPageBlame(res, null, true);
 	}, function(err) { 
 		getPageBlame(res, err, false);
-	});
-});
-app.post('/view-database', (req,res) => {
-
-	var items = chainQuery_items();
-	items.then( function(result) {
-		for(var i = 0; i < result.rows.length; i++) {
-            var row = result.rows[i];
-            var item_hash = JSON.stringify(row.hash).substring(1, JSON.stringify(row.hash).length-1);
-
-            if (item_hash == req.body.hash) {
-            	console.log(item_hash);
-            	console.log(JSON.stringify(row.key));
-            	
-				var promise = chainTransaction_buy(JSON.stringify(row.key));
-				promise.then( function(result) {
-					getPageViewDatabase(res, false, true);
-				}, function(err) { 
-					getPageViewDatabase(res, err);
-				});
-
-            }
-		}
-	}, function(err) { 
-		getPageViewDatabase(res, err);
 	});
 });
 app.post('/view-blockchain', (req,res) => {
@@ -281,7 +250,7 @@ app.post('/orders', (req,res) => {
 		// 7. Modify EOS state 					      -> Update Metadata
 
 		//1.
-		var item = chainQuery_items_byKey(req.body.key);
+		var item = chainQuery_items_byKey(req.body.itemKey);
 		item.then( function(result) {
 			var hash = JSON.stringify(result.rows[0].hash).substring(1, JSON.stringify(result.rows[0].hash).length-1);
 			//2.
@@ -582,14 +551,7 @@ function getPageViewDatabase(res, err, done) {
             if (owned) { 
             	table += '<td>' + decryptedData + '</td>';
             } else {
-            	table += '<td><div class="label-danger">Nicht in Besitz</td>';
-				//table += '<td>';
-				//table += '<form action="/view-database" method="post">';
-				//table += '<input id="hash" name="hash" type="hidden" value="' + hash + '" />';
-				//table += '<input class="btn btn-success btn" type="submit" value="Bestellversuch">';
-				//table += '</form>';
-				//table += '</td>';
-            	
+            	table += '<td><div class="label-danger">Nicht in Besitz</td>';            	
             }
 			table += '</tr>';
 		}
@@ -905,7 +867,7 @@ function getPageAbout(res) {
 //DATABASE QUERY
 function databaseQuery_item() {
 	return new Promise(function(resolve, reject) {
-		MongoClient.connect(url_mongo, function(err, client) {
+		MongoClient.connect(url_mongo, { useNewUrlParser: true }, function(err, client) {
 			assert.equal(null, err);
 			console.log("Connected successfully to MongoDB Container");
 			const db = client.db('reporting');
@@ -920,7 +882,7 @@ function databaseQuery_item() {
 }
 function databaseQuery_item_byID(key) {
 	return new Promise(function(resolve, reject) {
-		MongoClient.connect(url_mongo, function(err, client) {
+		MongoClient.connect(url_mongo, { useNewUrlParser: true }, function(err, client) {
 			assert.equal(null, err);
 			console.log("Connected successfully to MongoDB Container");
 			const db = client.db('reporting');
@@ -935,7 +897,7 @@ function databaseQuery_item_byID(key) {
 }
 function databaseQuery_publicKey_byUser(user) {
 	return new Promise(function(resolve, reject) {
-		MongoClient.connect(url_mongo, function(err, client) {
+		MongoClient.connect(url_mongo, { useNewUrlParser: true }, function(err, client) {
 			assert.equal(null, err);
 			console.log("Connected successfully to MongoDB Container");
 			const db = client.db('reporting');
@@ -951,44 +913,50 @@ function databaseQuery_publicKey_byUser(user) {
 
 
 //DATABASE TRANSACTIONS
-function databaseTransaction_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, init_vector, isIncident, title, description, industry) {
-	MongoClient.connect(url_mongo, function(err, client) {
-		assert.equal(null, err);
-		console.log("Connected successfully to MongoDB Container");
-		const db = client.db('reporting');
-		const collection = db.collection('item');
-		collection.insertOne({
-			_id:hashEncryptedData,
-			encryptedData:encryptedData,
-			fileKeys: [
-				{
-					encryptedFileKey:encryptedFileKey,
-					user:config.user
+function databaseTransaction_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, init_vector, isIncident, title, description, industry, bsig) {
+	return new Promise(function(resolve, reject) {
+		MongoClient.connect(url_mongo, { useNewUrlParser: true }, function(err, client) {
+			assert.equal(null, err);
+			console.log("Connected successfully to MongoDB Container");
+			const db = client.db('reporting');
+			const collection = db.collection('item');
+			if(bsig) {
+				collection.insertOne({
+					_id:hashEncryptedData, encryptedData:encryptedData,
+					fileKeys: [ { encryptedFileKey:encryptedFileKey, user:config.user }, { encryptedFileKey:encryptedFileKeyBSI, user:"bsi" } ], init_vector:init_vector,
+					itemType:isIncident, title:title,  description:description, industry:industry
 				},
-				{
-					encryptedFileKey:encryptedFileKeyBSI,
-					user:"bsi"
-				}
-			],
-			init_vector:init_vector,
-			itemType:isIncident,
-			title:title, 
-			description:description,
-			industry:industry
-		},
-			function(err, result) {
-				assert.equal(err, null);
-				assert.equal(1, result.result.n);
-				assert.equal(1, result.ops.length);
-				console.log("Inserted 1 document into the item collection");
+					function(err, result) {
+						assert.equal(err, null);
+						assert.equal(1, result.result.n);
+						assert.equal(1, result.ops.length);
+						console.log("Inserted 1 document into the item collection");
+						resolve(result);
+					}
+				);
+			} else {
+				collection.insertOne({
+					_id:hashEncryptedData, encryptedData:encryptedData,
+					fileKeys: [ { encryptedFileKey:encryptedFileKey, user:config.user } ], init_vector:init_vector,
+					itemType:isIncident, title:title, description:description, industry:industry
+				},
+					function(err, result) {
+						assert.equal(err, null);
+						assert.equal(1, result.result.n);
+						assert.equal(1, result.ops.length);
+						console.log("Inserted 1 document into the item collection");
+						resolve(result);
+					}
+				);
 			}
-		);
-	  client.close();
+
+		  client.close();
+		});
 	});
 }
 function databaseTransaction_addEncryptedFileKey(hash, user, encryptedFileKey) {
 	return new Promise(function(resolve, reject) {
-		MongoClient.connect(url_mongo, function(err, client) {
+		MongoClient.connect(url_mongo, { useNewUrlParser: true }, function(err, client) {
 			assert.equal(null, err);
 			console.log("Connected successfully to MongoDB Container");
 			const db = client.db('reporting');
@@ -1240,7 +1208,7 @@ function chainTransaction_received(orderKey, done) {
 	  });
 	  console.dir(result);
 }
-function chainTransaction_report(data, ancestor, incident, price, reward) {
+function chainTransaction_report(hash, ancestor, incident, price, reward) {
 	  return api.transact({
 	    actions: [{
 	      account: 'reporting',
@@ -1251,7 +1219,7 @@ function chainTransaction_report(data, ancestor, incident, price, reward) {
 	      }],
 	      data: {
 	        reporter: config.user,
-	        data: data,
+	        hash: hash,
 	        parentLink: ancestor,
 	        isIncident: incident,
 	        price: price,
@@ -1421,6 +1389,7 @@ function hashSHA256(text) {
 }
 function encryptAES(text, key) {
 	const iv = crypto.randomBytes(16);
+	//ISO/IEC 10116:2017
 	let cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(key), iv);
 	let encrypted = cipher.update(text);
 	encrypted = Buffer.concat([encrypted, cipher.final()]);

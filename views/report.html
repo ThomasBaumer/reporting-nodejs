@@ -31,7 +31,12 @@
                                     <option value="Transport und Verkehr">Transport und Verkehr</option>
                                 </select>
                             </td>
-                        </tr>
+                        </tr>    
+                        <tr>
+                            <td>* Report nach §8 BSIG</td>
+                            <td align="right"><input type="checkbox" id="incidentBSIG" name="incidentBSIG" checked /></td>
+                            
+                        </tr> 
                         <tr><td colspan="2">* Die Vorfallsdaten als STIX/VERIS/IODEF</td></tr>
                         <tr><td colspan="2"><textarea rows = "5" cols = "50" name = "incidentData" placeholder="XML oder JSON erwartet." required ></textarea></td></tr>
                         <tr>
@@ -45,7 +50,7 @@
                         <tr>
                             <td>Belohnung</td>
                             <td align="right"><input id="incidentReward" name="incidentReward" type="number" min=0  placeholder="0" /></td>
-                        </tr>    
+                        </tr>
                         <tr>
                             <td colspan="2"><input class="btn btn-primary btn-lg" type="submit" value="Vorfall berichten"></td>
                         </tr>
@@ -82,6 +87,11 @@
                                 </select>
                             </td>
                         </tr>
+                        <tr>
+                            <td>* Report nach §8 BSIG</td>
+                            <td align="right"><input type="checkbox" id="dataminingBSIG" name="dataminingBSIG" checked /></td>
+                            
+                        </tr> 
                         <tr><td colspan="2">* Die Datenanalyse in einem geeignetem Format</td></tr>
                         <tr><td colspan="2"><textarea rows = "5" cols = "50" name = "dataminingData" placeholder="XML oder JSON erwartet." required ></textarea></td></tr>
                         <tr>
