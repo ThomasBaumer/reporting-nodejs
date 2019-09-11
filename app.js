@@ -1390,7 +1390,7 @@ function hashSHA256(text) {
 function encryptAES(text, key) {
 	const iv = crypto.randomBytes(16);
 	//ISO/IEC 10116:2017
-	let cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(key), iv);
+	let cipher = crypto.createCipheriv('aes-256-ctr', Buffer.from(key), iv);
 	let encrypted = cipher.update(text);
 	encrypted = Buffer.concat([encrypted, cipher.final()]);
 	return { iv: iv.toString('hex'), encryptedData: encrypted.toString('hex') };
@@ -1398,7 +1398,7 @@ function encryptAES(text, key) {
 function decryptAES(text, key, init_vector) {
 	let iv 				= Buffer.from(init_vector, 'hex');
 	let encryptedText   = Buffer.from(text, 'hex');
-	let decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key), iv);
+	let decipher = crypto.createDecipheriv('aes-256-ctr', Buffer.from(key), iv);
 	let decrypted = decipher.update(encryptedText);
 	decrypted = Buffer.concat([decrypted, decipher.final()]);
 	return decrypted.toString();
