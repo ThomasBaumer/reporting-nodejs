@@ -40,7 +40,7 @@ router.use(function (req,res,next) {
 router.get('/', 				function(req,res){ res.redirect('/home'); });
 router.get('/home', 			function(req,res){ getPageHome(res); });
 router.get('/report', 			function(req,res){ getPageReport(res); });
-router.get('/view-blockchain', 	function(req,res){ getPageViewBlockchain(res); });
+router.get('/dashboard', 		function(req,res){ getPageViewBlockchain(res); });
 router.get('/view-database', 	function(req,res){ getPageViewDatabase(res); });
 router.get('/orders', 			function(req,res){ getPageOrders(res); });
 router.get('/transfer', 		function(req,res){ getPageTransfer(res); });
@@ -157,7 +157,7 @@ app.post('/blame', (req,res) => {
 		getPageBlame(res, err, false);
 	});
 });
-app.post('/view-blockchain', (req,res) => {
+app.post('/dashboard', (req,res) => {
 
 	if(req.body.hasOwnProperty("setvoters-btn")) {
 		var selectedVoters = chainWrite_selectvoter(req.body.key);
@@ -323,7 +323,7 @@ function getPageReport(res, err, done) {
 function getPageViewBlockchain(res, err, done) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
-	var view 		= fs.readFileSync(path + 'view-blockchain.html', 'utf8');
+	var view 		= fs.readFileSync(path + 'dashboard.html', 'utf8');
 
 	if(err) {
 		var message = "<div class='label-danger'>Interaktion fehlgeschlagen</div>" + err;
@@ -432,7 +432,7 @@ function getPageViewBlockchain(res, err, done) {
             if (state == "failed") {
             	table += '<div class="label-danger">Mangelhaftes Rating</div>';
             } else {
-            	table += '<form action="/view-blockchain" method="post">';
+            	table += '<form action="/dashboard" method="post">';
 		        table += '<input id="key" name="key" type="hidden" value="' + JSON.stringify(row.key) + '" />';
             	if (JSON.stringify(row.reporter).substring(1, JSON.stringify(row.reporter).length-1) == config.user) {
 	            	if(state == "setvoters") {
