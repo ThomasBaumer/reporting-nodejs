@@ -119,20 +119,8 @@ app.post('/mypage', (req,res) => {
 	console.log(req.body);
 	if (req.body.itemType == "calc_keypair") { 
 		const passphrase = getCryptoRandom(10);
-		const { generateKeyPairSync } = require('crypto');
-		const { publicKey, privateKey } = generateKeyPairSync('rsa', {
-			modulusLength: 4096,
-			publicKeyEncoding: {
-				type: 'spki',
-				format: 'pem'
-			},
-			privateKeyEncoding: {
-				type: 'pkcs8',
-				format: 'pem',
-				cipher: 'aes-256-cbc',
-				passphrase: passphrase
-			}
-		});
+		const { publicKey, privateKey } = calculateKeyPair(passphrase);
+
 		config.privateKey_mongo = privateKey;
 		config.publicKey_mongo = publicKey;
 		config.passphrase_mongo = passphrase;
@@ -1418,4 +1406,20 @@ function decryptRSA(toDecrypt, privateKey) {
     buffer,
   )
   return decrypted
+}
+function calculateKeyPair(passphrase) {
+	const { generateKeyPairSync } = require('crypto');
+	return generateKeyPairSync('rsa', {
+			modulusLength: 4096,
+			publicKeyEncoding: {
+				type: 'spki',
+				format: 'pem'
+			},
+			privateKeyEncoding: {
+				type: 'pkcs8',
+				format: 'pem',
+				cipher: 'aes-256-cbc',
+				passphrase: passphrase
+			}
+	});
 }
