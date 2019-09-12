@@ -99,11 +99,11 @@ app.post('/report', (req,res) => {
 			throw "Fehlerhafter Verschlüsselung";
 		}
 
-		var report_db_promise = databaseTransaction_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, iv, isIncident, title, description, industry, bsig);
+		var report_db_promise = databaseWrite_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, iv, isIncident, title, description, industry, bsig);
 		report_db_promise.then( function(result) {
 
-			//var report_chain_promise = chainTransaction_report(encryptedData, ancestor, isIncident, price, reward);
-			var report_chain_promise = chainTransaction_report(hashEncryptedData, ancestor, isIncident, price, reward);
+			//var report_chain_promise = chainWrite_report(encryptedData, ancestor, isIncident, price, reward);
+			var report_chain_promise = chainWrite_report(hashEncryptedData, ancestor, isIncident, price, reward);
 			report_chain_promise.then( function(result) {
 				getPageReport(res, false, true);
 
@@ -126,7 +126,7 @@ app.post('/mypage', (req,res) => {
 		config.passphrase_mongo = passphrase;
 		fs.writeFileSync(__dirname + '/config.json', JSON.stringify(config, null, 2));
 
-		chainTransaction_updatepk(publicKey).then(function(result) {
+		chainWrite_updatepk(publicKey).then(function(result) {
 			getPageMypage(res, null, true);
 		}, function(err) { 
 			getPageMypage(res, err, false); 
@@ -134,7 +134,7 @@ app.post('/mypage', (req,res) => {
 	}
 });
 app.post('/transfer', (req,res) => {
-	var promise = chainTransaction_transfer(req.body.to, req.body.amount);
+	var promise = chainWrite_transfer(req.body.to, req.body.amount);
 	promise.then( function(result) {
 		getPageTransfer(res);
 	}, function(err) { 
@@ -144,13 +144,13 @@ app.post('/transfer', (req,res) => {
 app.post('/blame', (req,res) => {
 	var promise
 	if (req.body.freeze == "freeze") {
-		promise = chainTransaction_blame(req.body.blamed, req.body.reason, true);
+		promise = chainWrite_blame(req.body.blamed, req.body.reason, true);
 	} else if (req.body.freeze == "unfreeze") {
-		promise = chainTransaction_blame(req.body.blamed, req.body.reason, false);
+		promise = chainWrite_blame(req.body.blamed, req.body.reason, false);
 	} else if (req.body.hasOwnProperty("confirmation-btn")) {
-		promise = chainTransaction_voteb(req.body.key, true);
+		promise = chainWrite_voteb(req.body.key, true);
 	} else if (req.body.hasOwnProperty("rejection-btn")) {
-		promise = chainTransaction_voteb(req.body.key, false);
+		promise = chainWrite_voteb(req.body.key, false);
 	}
 
 	promise.then( function(result) {
@@ -162,11 +162,11 @@ app.post('/blame', (req,res) => {
 app.post('/view-blockchain', (req,res) => {
 
 	if(req.body.hasOwnProperty("setvoters-btn")) {
-		var selectedVoters = chainTransaction_selectvoter(req.body.key);
+		var selectedVoters = chainWrite_selectvoter(req.body.key);
 		selectedVoters.then( function(result) {
 
 			var hash = req.body.hash;
-	        var db_item_entry_raw = databaseQuery_item_byID(hash);
+	        var db_item_entry_raw = databaseRead_item_byID(hash);
 	        db_item_entry_raw.then( function(result) {
 				var encryptedFileKeys = result[0].fileKeys;
 				var encryptedFileKey_user;
@@ -177,7 +177,7 @@ app.post('/view-blockchain', (req,res) => {
 				}
 				var decryptedFileKey = decryptRSA(encryptedFileKey_user, config.privateKey_mongo);
 
-				var applications = chainQuery_applications();
+				var applications = chainRead_applications();
 				applications.then( function(result) {
 					var applicants = [];
 					for(var i = 0; i < result.rows.length; i++) {
@@ -189,7 +189,7 @@ app.post('/view-blockchain', (req,res) => {
 		            }
 		            console.log(applicants.toString());
 
-		            var users = chainQuery_users();
+		            var users = chainRead_users();
 					users.then( function(result) {
 						applicants.forEach(function(element) {
 							for(var i = 0; i < result.rows.length; i++) {
@@ -197,7 +197,7 @@ app.post('/view-blockchain', (req,res) => {
 			            		if(row.user == element) {
 			            			var encryptedFileKey_applicant = encryptRSA(decryptedFileKey, row.publicKey);
 			            			console.log("\n\napplicant: " + element + "\n encryptedFileKey_applicant: " + encryptedFileKey_applicant);
-			            			databaseTransaction_addEncryptedFileKey(hash, element, encryptedFileKey_applicant);
+			            			databaseWrite_addEncryptedFileKey(hash, element, encryptedFileKey_applicant);
 			            		}
 		            		}
 						});				
@@ -210,13 +210,13 @@ app.post('/view-blockchain', (req,res) => {
 	} else {
 		var promise;
 		if(req.body.hasOwnProperty("apply-btn")) {
-			promise = chainTransaction_apply(req.body.key);
+			promise = chainWrite_apply(req.body.key);
 		} else if(req.body.hasOwnProperty("vote-btn")) { 
-			promise = chainTransaction_vote(req.body.key, req.body.overall, req.body.description, req.body.service, req.body.quality);
+			promise = chainWrite_vote(req.body.key, req.body.overall, req.body.description, req.body.service, req.body.quality);
 		} else if(req.body.hasOwnProperty("order-btn")) {
-			promise = chainTransaction_buy(req.body.key);
+			promise = chainWrite_buy(req.body.key);
 		} else if(req.body.hasOwnProperty("price-btn")) {
-			promise = chainTransaction_updateprice(req.body.key, req.body.price);
+			promise = chainWrite_updateprice(req.body.key, req.body.price);
 		}
 		promise.then( function(result) {
 			getPageViewBlockchain(res, false, true);
@@ -238,11 +238,11 @@ app.post('/orders', (req,res) => {
 		// 7. Modify EOS state 					      -> Update Metadata
 
 		//1.
-		var item = chainQuery_items_byKey(req.body.itemKey);
+		var item = chainRead_items_byKey(req.body.itemKey);
 		item.then( function(result) {
 			var hash = JSON.stringify(result.rows[0].hash).substring(1, JSON.stringify(result.rows[0].hash).length-1);
 			//2.
-			var db_item_entry_raw = databaseQuery_item_byID(hash);
+			var db_item_entry_raw = databaseRead_item_byID(hash);
 			db_item_entry_raw.then( function(result) {
 				var encryptedFileKeys = result[0].fileKeys;
 				var encryptedFileKey_user;
@@ -254,16 +254,16 @@ app.post('/orders', (req,res) => {
 				//3.
 				var decryptedFileKey = decryptRSA(encryptedFileKey_user, config.privateKey_mongo);
 				//4.
-				var buyer_entry_eos = chainQuery_users_byUser(req.body.buyer);
+				var buyer_entry_eos = chainRead_users_byUser(req.body.buyer);
 				buyer_entry_eos.then( function(result) {
 					var publicKey_buyer = result.rows[0].publicKey;
 					//5. 
 					var encryptedFileKey_buyer = encryptRSA(decryptedFileKey, publicKey_buyer);
 					//6.
-					var db_transaction = databaseTransaction_addEncryptedFileKey(hash, req.body.buyer, encryptedFileKey_buyer);
+					var db_transaction = databaseWrite_addEncryptedFileKey(hash, req.body.buyer, encryptedFileKey_buyer);
 					db_transaction.then( function(result) {
 						//7.
-						var set_chain_state = chainTransaction_sent(req.body.orderKey);
+						var set_chain_state = chainWrite_sent(req.body.orderKey);
 						set_chain_state.then( function(result) {
 							getPageOrders(res, null, true);
 
@@ -277,9 +277,9 @@ app.post('/orders', (req,res) => {
 	} else {
 		var promise;
 		if (req.body.hasOwnProperty("confirmation-btn")) {
-			promise = chainTransaction_received(req.body.key, true);
+			promise = chainWrite_received(req.body.key, true);
 		} else if (req.body.hasOwnProperty("rejection-btn")) {
-			promise = chainTransaction_received(req.body.key, false);
+			promise = chainWrite_received(req.body.key, false);
 		}
 
 		promise.then( function(result) {
@@ -341,7 +341,7 @@ function getPageViewBlockchain(res, err, done) {
 	}
 
 
-	var items = chainQuery_items();
+	var items = chainRead_items();
 	items.then( function(result) {
 
 		//assemble table
@@ -476,7 +476,7 @@ function getPageViewDatabase(res, err, done) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
 	var view 		= fs.readFileSync(path + 'view-database.html', 'utf8');
-	var items 		= databaseQuery_item();
+	var items 		= databaseRead_item();
 
 	if(err) {
 		var message = "<div class='label-danger'>Bestellung fehlgeschlagen</div>"+err;
@@ -581,7 +581,7 @@ function getPageOrders(res, err, done) {
 		orders = orders_error_dom.serialize()
 	}
 
-	var order_items = chainQuery_orders();
+	var order_items = chainRead_orders();
 	order_items.then( function(result) {
 
 		//assemble table_torelease
@@ -690,7 +690,7 @@ function getPageTransfer(res, err) {
 		transfer = transfer_error_dom.serialize();
 	}
 
-	var users = chainQuery_users();
+	var users = chainRead_users();
 	users.then( function(result) {
 
 		//assemble table
@@ -748,7 +748,7 @@ function getPageBlame(res, err, done) {
 		blame = blame_error_dom.serialize()
 	}
 
-	var blamings = chainQuery_blamings();
+	var blamings = chainRead_blamings();
 	blamings.then( function(result) {
 		//assemble table
 		var table = '<table>';
@@ -852,8 +852,8 @@ function getPageAbout(res) {
 
 
 
-//DATABASE QUERY
-function databaseQuery_item() {
+//DATABASE READ
+function databaseRead_item() {
 	return new Promise(function(resolve, reject) {
 		MongoClient.connect(url_mongo, { useNewUrlParser: true }, function(err, client) {
 			assert.equal(null, err);
@@ -868,7 +868,7 @@ function databaseQuery_item() {
 		});
 	});
 }
-function databaseQuery_item_byID(key) {
+function databaseRead_item_byID(key) {
 	return new Promise(function(resolve, reject) {
 		MongoClient.connect(url_mongo, { useNewUrlParser: true }, function(err, client) {
 			assert.equal(null, err);
@@ -883,7 +883,7 @@ function databaseQuery_item_byID(key) {
 		});
 	});
 }
-function databaseQuery_publicKey_byUser(user) {
+function databaseRead_publicKey_byUser(user) {
 	return new Promise(function(resolve, reject) {
 		MongoClient.connect(url_mongo, { useNewUrlParser: true }, function(err, client) {
 			assert.equal(null, err);
@@ -900,8 +900,8 @@ function databaseQuery_publicKey_byUser(user) {
 }
 
 
-//DATABASE TRANSACTIONS
-function databaseTransaction_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, init_vector, isIncident, title, description, industry, bsig) {
+//DATABASE WRITE
+function databaseWrite_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, init_vector, isIncident, title, description, industry, bsig) {
 	return new Promise(function(resolve, reject) {
 		MongoClient.connect(url_mongo, { useNewUrlParser: true }, function(err, client) {
 			assert.equal(null, err);
@@ -942,7 +942,7 @@ function databaseTransaction_report(encryptedData, hashEncryptedData, encryptedF
 		});
 	});
 }
-function databaseTransaction_addEncryptedFileKey(hash, user, encryptedFileKey) {
+function databaseWrite_addEncryptedFileKey(hash, user, encryptedFileKey) {
 	return new Promise(function(resolve, reject) {
 		MongoClient.connect(url_mongo, { useNewUrlParser: true }, function(err, client) {
 			assert.equal(null, err);
@@ -966,8 +966,8 @@ function databaseTransaction_addEncryptedFileKey(hash, user, encryptedFileKey) {
 
 
 
-//CHAIN QUERY
-async function chainQuery_applications() {
+//CHAIN READ
+async function chainRead_applications() {
 	return await rpc.get_table_rows({
 		"json": true,
 		"code": "reporting",
@@ -976,7 +976,7 @@ async function chainQuery_applications() {
 		"limit": 100
 	});
 }
-async function chainQuery_blamings() {
+async function chainRead_blamings() {
 	return await rpc.get_table_rows({
 		"json": true,
 		"code": "reporting",
@@ -985,7 +985,7 @@ async function chainQuery_blamings() {
 		"reverse": true
 	});
 }
-async function chainQuery_items() {
+async function chainRead_items() {
 	return await rpc.get_table_rows({
 		"json": true,
 		"code": "reporting",
@@ -994,7 +994,7 @@ async function chainQuery_items() {
 		"reverse": true
 	});
 }
-async function chainQuery_items_byKey(key) {
+async function chainRead_items_byKey(key) {
 	return await rpc.get_table_rows({
 		"json": true,
 		"code": "reporting",
@@ -1006,10 +1006,10 @@ async function chainQuery_items_byKey(key) {
 		"reverse": true
 	});
 }
-/*async function chainQuery_items_byHash(hash) {
+/*async function chainRead_items_byHash(hash) {
 	secondary index does not work: https://github.com/EOSIO/eos/pull/6591
 }*/
-async function chainQuery_orders() {
+async function chainRead_orders() {
 	return await rpc.get_table_rows({
 		"json": true,
 		"code": "reporting",
@@ -1017,7 +1017,7 @@ async function chainQuery_orders() {
 		"table": "order"
 	});
 }
-async function chainQuery_users() {
+async function chainRead_users() {
 	return await rpc.get_table_rows({
 		"json": true,
 		"code": "reporting",
@@ -1025,7 +1025,7 @@ async function chainQuery_users() {
 		"table": "users"
 	});
 }
-async function chainQuery_users_byUser(user) {
+async function chainRead_users_byUser(user) {
 	return await rpc.get_table_rows({
 		"json": true,
 		"code": "reporting",
@@ -1035,7 +1035,7 @@ async function chainQuery_users_byUser(user) {
 		"limit": 1
 	});
 }
-async function chainQuery_votings() {
+async function chainRead_votings() {
 	return await rpc.get_table_rows({
 		"json": true,
 		"code": "reporting",
@@ -1043,7 +1043,7 @@ async function chainQuery_votings() {
 		"table": "voting"
 	});
 }
-async function chainQuery_votingbs() {
+async function chainRead_votingbs() {
 	return await rpc.get_table_rows({
 		"json": true,
 		"code": "reporting",
@@ -1054,8 +1054,8 @@ async function chainQuery_votingbs() {
 
 
 
-//CHAIN TRANACTIONS
-function chainTransaction_apply(itemKey) {
+//CHAIN WRITE
+function chainWrite_apply(itemKey) {
 	  return api.transact({
 	    actions: [{
 	      account: 'reporting',
@@ -1074,7 +1074,7 @@ function chainTransaction_apply(itemKey) {
 	    expireSeconds: 30,
 	  });
 }
-function chainTransaction_approve(itemKey) {
+function chainWrite_approve(itemKey) {
   	(async () => {
 	  const result = await api.transact({
 	    actions: [{
@@ -1095,7 +1095,7 @@ function chainTransaction_approve(itemKey) {
 	  console.dir(result);
 	})();
 }
-function chainTransaction_blame(blamed, reason, freeze) {
+function chainWrite_blame(blamed, reason, freeze) {
 	  return api.transact({
 	    actions: [{
 	      account: 'reporting',
@@ -1116,7 +1116,7 @@ function chainTransaction_blame(blamed, reason, freeze) {
 	    expireSeconds: 30,
 	  });
 }
-function chainTransaction_buy(itemKey) {
+function chainWrite_buy(itemKey) {
 	  return api.transact({
 	    actions: [{
 	      account: 'reporting',
@@ -1136,7 +1136,7 @@ function chainTransaction_buy(itemKey) {
 	  });
 	  console.dir(result);
 }
-function chainTransaction_enrol() {
+function chainWrite_enrol() {
   	(async () => {
 	  const result = await api.transact({
 	    actions: [{
@@ -1157,7 +1157,7 @@ function chainTransaction_enrol() {
 	  console.dir(result);
 	})();
 }
-function chainTransaction_init() {
+function chainWrite_init() {
   	(async () => {
 	  const result = await api.transact({
 	    actions: [{
@@ -1175,7 +1175,7 @@ function chainTransaction_init() {
 	  console.dir(result);
 	})();
 }
-function chainTransaction_received(orderKey, done) {
+function chainWrite_received(orderKey, done) {
   	return api.transact({
 	    actions: [{
 	      account: 'reporting',
@@ -1196,7 +1196,7 @@ function chainTransaction_received(orderKey, done) {
 	  });
 	  console.dir(result);
 }
-function chainTransaction_report(hash, ancestor, incident, price, reward) {
+function chainWrite_report(hash, ancestor, incident, price, reward) {
 	  return api.transact({
 	    actions: [{
 	      account: 'reporting',
@@ -1219,7 +1219,7 @@ function chainTransaction_report(hash, ancestor, incident, price, reward) {
 	    expireSeconds: 30,
 	  });
 }
-function chainTransaction_selectvoter(itemKey) {
+function chainWrite_selectvoter(itemKey) {
 	var nonce = parseInt("0x"+getCryptoRandom(5));
 	  return api.transact({
 	    actions: [{
@@ -1240,7 +1240,7 @@ function chainTransaction_selectvoter(itemKey) {
 	    expireSeconds: 30,
 	  });
 }
-function chainTransaction_sent(orderKey) {
+function chainWrite_sent(orderKey) {
 	  return api.transact({
 	    actions: [{
 	      account: 'reporting',
@@ -1259,7 +1259,7 @@ function chainTransaction_sent(orderKey) {
 	    expireSeconds: 30,
 	  });
 }
-function chainTransaction_transfer(to, amount) {
+function chainWrite_transfer(to, amount) {
 	  return api.transact({
 	    actions: [{
 	      account: 'reporting',
@@ -1280,7 +1280,7 @@ function chainTransaction_transfer(to, amount) {
 	  });
 	  console.dir(result);
 }
-function chainTransaction_updatepk(publicKey) {
+function chainWrite_updatepk(publicKey) {
 	  return api.transact({
 	    actions: [{
 	      account: 'reporting',
@@ -1299,7 +1299,7 @@ function chainTransaction_updatepk(publicKey) {
 	    expireSeconds: 30,
 	  });
 }
-function chainTransaction_updateprice(itemKey, price) {
+function chainWrite_updateprice(itemKey, price) {
 	  return api.transact({
 	    actions: [{
 	      account: 'reporting',
@@ -1319,7 +1319,7 @@ function chainTransaction_updateprice(itemKey, price) {
 	    expireSeconds: 30,
 	  });
 }
-function chainTransaction_vote(itemKey, overall, description, service, quality) {
+function chainWrite_vote(itemKey, overall, description, service, quality) {
 	  return api.transact({
 	    actions: [{
 	      account: 'reporting',
@@ -1342,7 +1342,7 @@ function chainTransaction_vote(itemKey, overall, description, service, quality) 
 	    expireSeconds: 30,
 	  });
 }
-function chainTransaction_voteb(blameKey, value) {
+function chainWrite_voteb(blameKey, value) {
 	return api.transact({
 	    actions: [{
 	      account: 'reporting',
