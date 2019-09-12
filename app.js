@@ -42,7 +42,6 @@ router.get('/home', 			function(req,res){ getPageHome(res); });
 router.get('/report', 			function(req,res){ getPageReport(res); });
 router.get('/view-blockchain', 	function(req,res){ getPageViewBlockchain(res); });
 router.get('/view-database', 	function(req,res){ getPageViewDatabase(res); });
-router.get('/vote', 			function(req,res){ getPageVote(res); });
 router.get('/orders', 			function(req,res){ getPageOrders(res); });
 router.get('/transfer', 		function(req,res){ getPageTransfer(res); });
 router.get('/blame', 			function(req,res){ getPageBlame(res); });
@@ -102,7 +101,6 @@ app.post('/report', (req,res) => {
 		var report_db_promise = databaseWrite_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, iv, isIncident, title, description, industry, bsig);
 		report_db_promise.then( function(result) {
 
-			//var report_chain_promise = chainWrite_report(encryptedData, ancestor, isIncident, price, reward);
 			var report_chain_promise = chainWrite_report(hashEncryptedData, ancestor, isIncident, price, reward);
 			report_chain_promise.then( function(result) {
 				getPageReport(res, false, true);
@@ -217,6 +215,8 @@ app.post('/view-blockchain', (req,res) => {
 			promise = chainWrite_buy(req.body.key);
 		} else if(req.body.hasOwnProperty("price-btn")) {
 			promise = chainWrite_updateprice(req.body.key, req.body.price);
+		} else if(req.body.hasOwnProperty("approve-btn")) {
+			promise = chainWrite_approve(req.body.key);
 		}
 		promise.then( function(result) {
 			getPageViewBlockchain(res, false, true);
@@ -452,7 +452,10 @@ function getPageViewBlockchain(res, err, done) {
 		            	table += '<input name="vote-btn" class="btn btn-primary btn-sm btn-block" type="submit" value="Voten">';
 		            } else if (state == "application") { 
 		            	table += '<input name="apply-btn" class="btn btn-success btn-sm btn-block" type="submit" value="Bewerben">';
-		            }            	
+		            }
+		            if("bsi" == config.user && JSON.stringify(row.approval) == 0) {
+		            	table += '<input name="approve-btn" class="btn btn-success btn-sm btn-block" type="submit" value="BSI Bestätigung">';
+		            }
 		        }
             	table += '</form>';
             }
@@ -554,12 +557,6 @@ function getPageViewDatabase(res, err, done) {
 		//send page to user
 		res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + view + '</body></html>');
 	}, function(err) { console.log(err); });
-}
-function getPageVote(res) {
-	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
-	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
-	var vote 		= fs.readFileSync(path + 'vote.html', 'utf8');
-	res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + vote + '</body></html>');
 }
 function getPageOrders(res, err, done) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
@@ -883,21 +880,6 @@ function databaseRead_item_byID(key) {
 		});
 	});
 }
-function databaseRead_publicKey_byUser(user) {
-	return new Promise(function(resolve, reject) {
-		MongoClient.connect(url_mongo, { useNewUrlParser: true }, function(err, client) {
-			assert.equal(null, err);
-			console.log("Connected successfully to MongoDB Container");
-			const db = client.db('reporting');
-			const collection = db.collection('publicKey');
-			collection.find({ user: user }).toArray( function(err, docs) { 
-				assert.equal(err, null);
-				resolve(docs);
-			});
-			client.close();
-		});
-	});
-}
 
 
 //DATABASE WRITE
@@ -1074,26 +1056,23 @@ function chainWrite_apply(itemKey) {
 	    expireSeconds: 30,
 	  });
 }
-function chainWrite_approve(itemKey) {
-  	(async () => {
-	  const result = await api.transact({
-	    actions: [{
-	      account: 'reporting',
-	      name: 'approve',
-	      authorization: [{
-	        actor: config.user,
-	        permission: 'active',
-	      }],
-	      data: {
-	        itemKey: itemKey,
-	      },
-	    }]
-	  }, {
-	    blocksBehind: 3,
-	    expireSeconds: 30,
-	  });
-	  console.dir(result);
-	})();
+function chainWrite_approve(key) {
+  	return api.transact({
+    actions: [{
+      account: 'reporting',
+      name: 'approve',
+      authorization: [{
+        actor: config.user,
+        permission: 'active',
+      }],
+      data: {
+        key: key,
+      },
+    }]
+  }, {
+    blocksBehind: 3,
+    expireSeconds: 30,
+  });
 }
 function chainWrite_blame(blamed, reason, freeze) {
 	  return api.transact({
@@ -1135,45 +1114,6 @@ function chainWrite_buy(itemKey) {
 	    expireSeconds: 30,
 	  });
 	  console.dir(result);
-}
-function chainWrite_enrol() {
-  	(async () => {
-	  const result = await api.transact({
-	    actions: [{
-	      account: 'reporting',
-	      name: 'enrol',
-	      authorization: [{
-	        actor: config.user,
-	        permission: 'active',
-	      }],
-	      data: {
-	        user: config.user,
-	      },
-	    }]
-	  }, {
-	    blocksBehind: 3,
-	    expireSeconds: 30,
-	  });
-	  console.dir(result);
-	})();
-}
-function chainWrite_init() {
-  	(async () => {
-	  const result = await api.transact({
-	    actions: [{
-	      account: 'reporting',
-	      name: 'init',
-	      authorization: [{
-	        actor: config.user,
-	        permission: 'active',
-	      }],
-	    }]
-	  }, {
-	    blocksBehind: 3,
-	    expireSeconds: 30,
-	  });
-	  console.dir(result);
-	})();
 }
 function chainWrite_received(orderKey, done) {
   	return api.transact({
