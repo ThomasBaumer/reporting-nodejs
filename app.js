@@ -41,7 +41,7 @@ router.get('/', 				function(req,res){ res.redirect('/home'); });
 router.get('/home', 			function(req,res){ getPageHome(res); });
 router.get('/report', 			function(req,res){ getPageReport(res); });
 router.get('/dashboard', 		function(req,res){ getPageViewBlockchain(res); });
-router.get('/view-database', 	function(req,res){ getPageViewDatabase(res); });
+router.get('/view', 	function(req,res){ getPageViewDatabase(res); });
 router.get('/orders', 			function(req,res){ getPageOrders(res); });
 router.get('/transfer', 		function(req,res){ getPageTransfer(res); });
 router.get('/blame', 			function(req,res){ getPageBlame(res); });
@@ -478,7 +478,7 @@ function getPageViewBlockchain(res, err, done) {
 function getPageViewDatabase(res, err, done) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
-	var view 		= fs.readFileSync(path + 'view-database.html', 'utf8');
+	var view 		= fs.readFileSync(path + 'view.html', 'utf8');
 	var items 		= databaseRead_item();
 
 	if(err) {
