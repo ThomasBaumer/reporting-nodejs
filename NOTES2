@@ -3,6 +3,7 @@ node app.js
 
 
 docker run -p 27017:27017 -v ~/data/db:/data/db mongo --directoryperdb --logappend --port 27017
+docker run -p 27017:27017 mongo --port 27017
 
 
 

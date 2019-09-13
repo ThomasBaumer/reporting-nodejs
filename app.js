@@ -583,7 +583,7 @@ function getPageOrders(res, err, done) {
 
 		//assemble table_torelease
 		var table_torelease = '<table>';
-        table_torelease += '<tr><th>#</th><th>ItemLink</th><th>Käufer</th><th>Info/Aktion</th></tr>'
+        table_torelease += '<tr><th>#</th><th>Item</th><th>Käufer</th><th>Info/Aktion</th></tr>'
         for(var i = 0; i < result.rows.length; i++) {
             var row = result.rows[i];
             var text = ""; var label = "";
@@ -626,7 +626,7 @@ function getPageOrders(res, err, done) {
 
 		//assemble table_myOrders
 		var table_myOrders = '<table>';
-        table_myOrders += '<tr><th>#</th><th>ItemLink</th><th>Käufer</th><th>Erhalten?</th></tr>'
+        table_myOrders += '<tr><th>#</th><th>Item</th><th>Käufer</th><th>Erhalten?</th></tr>'
         for(var i = 0; i < result.rows.length; i++) {
 			var row = result.rows[i];
 
