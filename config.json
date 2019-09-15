@@ -9,12 +9,12 @@
   "Nodeos": {
     "ip": "127.0.0.1",
     "port": 8888,
-    "version": "v1.7.3"
+    "version": "v1.8.1"
   },
   "Kesod": {
     "ip": "127.0.0.1",
     "port": 5555,
-    "version": "v1.7.3"
+    "version": "v1.8.1"
   },
   "MongoDB": {
     "ip": "127.0.0.1",
