@@ -9,9 +9,9 @@ const fs = require('fs');
 
 //eosjs
 const { Api, JsonRpc, RpcError } = require('eosjs');
-const { JsSignatureProvider } = require('eosjs/dist/eosjs-jssig');      // development only
-const fetch = require('node-fetch');                                    // node only; not needed in browsers
-const { TextEncoder, TextDecoder } = require('util');                   // node only; native TextEncoder/Decoder
+const { JsSignatureProvider } = require('eosjs/dist/eosjs-jssig');
+const fetch = require('node-fetch');
+const { TextEncoder, TextDecoder } = require('util');
 //load custom config file
 const config = require(__dirname + '/config.json');
 const signatureProvider = new JsSignatureProvider([config.privateKey_eos]);
@@ -51,14 +51,27 @@ router.get('/about', 			function(req,res){ getPageAbout(res); });
 app.use(express.static(path));
 app.use('/', router);
 
-app.listen(port, function () { console.log('App listening on port 8080!'); });
+app.listen(port, function () { 
+	console.log(`
+██████╗ ███████╗██████╗  ██████╗ ██████╗ ████████╗██╗███╗   ██╗ ██████╗     ██╗    ██╗███████╗██████╗ ███████╗███████╗██████╗ ██╗   ██╗███████╗██████╗ 
+██╔══██╗██╔════╝██╔══██╗██╔═══██╗██╔══██╗╚══██╔══╝██║████╗  ██║██╔════╝     ██║    ██║██╔════╝██╔══██╗██╔════╝██╔════╝██╔══██╗██║   ██║██╔════╝██╔══██╗
+██████╔╝█████╗  ██████╔╝██║   ██║██████╔╝   ██║   ██║██╔██╗ ██║██║  ███╗    ██║ █╗ ██║█████╗  ██████╔╝███████╗█████╗  ██████╔╝██║   ██║█████╗  ██████╔╝
+██╔══██╗██╔══╝  ██╔═══╝ ██║   ██║██╔══██╗   ██║   ██║██║╚██╗██║██║   ██║    ██║███╗██║██╔══╝  ██╔══██╗╚════██║██╔══╝  ██╔══██╗╚██╗ ██╔╝██╔══╝  ██╔══██╗
+██║  ██║███████╗██║     ╚██████╔╝██║  ██║   ██║   ██║██║ ╚████║╚██████╔╝    ╚███╔███╔╝███████╗██████╔╝███████║███████╗██║  ██║ ╚████╔╝ ███████╗██║  ██║
+╚═╝  ╚═╝╚══════╝╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝╚═╝  ╚═══╝ ╚═════╝      ╚══╝╚══╝ ╚══════╝╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝  ╚═╝
+
+Interact with the webserver via localhost:8080.
+Don't forget to configure the config.json before starting the reporting webserver!`);
+});
 
 
 //POST ENDPOINTS: MANAGE FORMS
 app.use(express.urlencoded({extended: true})); 
+//Mange the report form
 app.post('/report', (req,res) => {
 	console.log(req.body);
 	try {
+		//fetch data
 		var isIncident = true; if (req.body.itemType == "datamining") { isIncident = false; }
 		var title, description, industry, data, ancestor, price, reward, bsig;
 		if(isIncident) {
@@ -98,6 +111,7 @@ app.post('/report', (req,res) => {
 			throw "Fehlerhafter Verschlüsselung";
 		}
 
+		//write data
 		var report_db_promise = databaseWrite_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, iv, isIncident, title, description, industry, bsig);
 		report_db_promise.then( function(result) {
 
@@ -113,17 +127,21 @@ app.post('/report', (req,res) => {
 		getPageReport(res, "FEHLER: Meldung war nicht erfolgreich. Verschlüsselung oder Blockchain/Datenbank Transaktion schlug fehl.", true);
 	}
 });
+//manage mypage form (generating key pairs)
 app.post('/mypage', (req,res) => {
 	console.log(req.body);
 	if (req.body.itemType == "calc_keypair") { 
+		//get key pair
 		const passphrase = getCryptoRandom(10);
 		const { publicKey, privateKey } = calculateKeyPair(passphrase);
 
+		//write key pair locally
 		config.privateKey_mongo = privateKey;
 		config.publicKey_mongo = publicKey;
 		config.passphrase_mongo = passphrase;
 		fs.writeFileSync(__dirname + '/config.json', JSON.stringify(config, null, 2));
 
+		//write key pair remote (on-chain)
 		chainWrite_updatepk(publicKey).then(function(result) {
 			getPageMypage(res, null, true);
 		}, function(err) { 
@@ -131,6 +149,7 @@ app.post('/mypage', (req,res) => {
 		});
 	}
 });
+//manage transfer form (on-chain)
 app.post('/transfer', (req,res) => {
 	var promise = chainWrite_transfer(req.body.to, req.body.amount);
 	promise.then( function(result) {
@@ -139,33 +158,43 @@ app.post('/transfer', (req,res) => {
 		getPageTransfer(res, err);
 	});
 });
+//manage blame form
 app.post('/blame', (req,res) => {
 	var promise
 	if (req.body.freeze == "freeze") {
+		//write on-chain a freeze request
 		promise = chainWrite_blame(req.body.blamed, req.body.reason, true);
 	} else if (req.body.freeze == "unfreeze") {
+		//write on-chain a unfreeze request
 		promise = chainWrite_blame(req.body.blamed, req.body.reason, false);
 	} else if (req.body.hasOwnProperty("confirmation-btn")) {
+		//write on-chain a confirmation of the blame
 		promise = chainWrite_voteb(req.body.key, true);
 	} else if (req.body.hasOwnProperty("rejection-btn")) {
+		//write on-chain a rejections of the blame
 		promise = chainWrite_voteb(req.body.key, false);
 	}
 
+	//catch the result of the write transaction with EOS and generate the page
 	promise.then( function(result) {
 		getPageBlame(res, null, true);
 	}, function(err) { 
 		getPageBlame(res, err, false);
 	});
 });
+//manage the dashboard form(s)
 app.post('/dashboard', (req,res) => {
 
+	//select voters (on-chain) and share the threat intelligence data with the voters
 	if(req.body.hasOwnProperty("setvoters-btn")) {
 		var selectedVoters = chainWrite_selectvoter(req.body.key);
 		selectedVoters.then( function(result) {
 
+			//get decrypted file key
 			var hash = req.body.hash;
 	        var db_item_entry_raw = databaseRead_item_byID(hash);
 	        db_item_entry_raw.then( function(result) {
+
 				var encryptedFileKeys = result[0].fileKeys;
 				var encryptedFileKey_user;
 				for (var i = 0; i < encryptedFileKeys.length; i++){
@@ -175,6 +204,7 @@ app.post('/dashboard', (req,res) => {
 				}
 				var decryptedFileKey = decryptRSA(encryptedFileKey_user, config.privateKey_mongo);
 
+				//get applicants/voters
 				var applications = chainRead_applications();
 				applications.then( function(result) {
 					var applicants = [];
@@ -187,14 +217,17 @@ app.post('/dashboard', (req,res) => {
 		            }
 		            console.log(applicants.toString());
 
+		            //get public key of voters
 		            var users = chainRead_users();
 					users.then( function(result) {
 						applicants.forEach(function(element) {
 							for(var i = 0; i < result.rows.length; i++) {
 			            		var row = result.rows[i];
 			            		if(row.user == element) {
+			            			//encrypt file key with public key of voter
 			            			var encryptedFileKey_applicant = encryptRSA(decryptedFileKey, row.publicKey);
 			            			console.log("\n\napplicant: " + element + "\n encryptedFileKey_applicant: " + encryptedFileKey_applicant);
+			            			//write encrypted file key to database
 			            			databaseWrite_addEncryptedFileKey(hash, element, encryptedFileKey_applicant);
 			            		}
 		            		}
@@ -205,19 +238,27 @@ app.post('/dashboard', (req,res) => {
 			}, function(err) { getPageViewBlockchain(res, err); });
 		}, function(err) { getPageViewBlockchain(res, err); });
 
+	//everything else is trivial
 	} else {
 		var promise;
+		//application
 		if(req.body.hasOwnProperty("apply-btn")) {
 			promise = chainWrite_apply(req.body.key);
+		//voting
 		} else if(req.body.hasOwnProperty("vote-btn")) { 
 			promise = chainWrite_vote(req.body.key, req.body.overall, req.body.description, req.body.service, req.body.quality);
+		//order
 		} else if(req.body.hasOwnProperty("order-btn")) {
 			promise = chainWrite_buy(req.body.key);
+		//set price
 		} else if(req.body.hasOwnProperty("price-btn")) {
 			promise = chainWrite_updateprice(req.body.key, req.body.price);
+		//approve (only by bsi)
 		} else if(req.body.hasOwnProperty("approve-btn")) {
 			promise = chainWrite_approve(req.body.key);
 		}
+
+		//generate the new page
 		promise.then( function(result) {
 			getPageViewBlockchain(res, false, true);
 		}, function(err) { 
@@ -225,8 +266,10 @@ app.post('/dashboard', (req,res) => {
 		});
 	}
 });
+//manage orders
 app.post('/orders', (req,res) => {
 
+	//execute order
 	if (req.body.hasOwnProperty("decrypt-btn")) {
 
 		// 1. Download Incident from EOS with itemKey -> Getting Hash
@@ -276,8 +319,10 @@ app.post('/orders', (req,res) => {
 		getPageOrders(res, null, true);
 	} else {
 		var promise;
+		//confirm the receiving of the ordered threat intelligence data
 		if (req.body.hasOwnProperty("confirmation-btn")) {
 			promise = chainWrite_received(req.body.key, true);
+		//confirm the sending of the ordered threat intelligence data
 		} else if (req.body.hasOwnProperty("rejection-btn")) {
 			promise = chainWrite_received(req.body.key, false);
 		}
@@ -320,6 +365,7 @@ function getPageReport(res, err, done) {
 
 	res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + report + '</body></html>');
 }
+//view blockchain data (dashboard) with some colored lables and buttons. Don't get dazzled by it's fanciness. :))
 function getPageViewBlockchain(res, err, done) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
@@ -475,6 +521,7 @@ function getPageViewBlockchain(res, err, done) {
 		res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + view + '</body></html>');
 	}, function(err) { console.log(err); });
 }
+//view database with colored buttons and lables. With the encryption of the threat intelligence data. 
 function getPageViewDatabase(res, err, done) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
@@ -558,6 +605,7 @@ function getPageViewDatabase(res, err, done) {
 		res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + view + '</body></html>');
 	}, function(err) { console.log(err); });
 }
+//get order page and its buttons
 function getPageOrders(res, err, done) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
@@ -674,6 +722,7 @@ function getPageOrders(res, err, done) {
 		res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + orders + '</body></html>');
 	}, function(err) { console.log(err); });
 }
+//get transfer page and the users of the incident reporting platform
 function getPageTransfer(res, err) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
@@ -725,6 +774,7 @@ function getPageTransfer(res, err) {
 		res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + transfer + '</body></html>');
 	}, function(err) { console.log(err); });
 }
+//get the blame page
 function getPageBlame(res, err, done) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
@@ -799,6 +849,7 @@ function getPageBlame(res, err, done) {
 		res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + blame + '</body></html>');
 	}, function(err) { console.log(err); });
 }
+//get the mypage page. 
 function getPageMypage(res, err, done) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
@@ -840,6 +891,7 @@ function getPageMypage(res, err, done) {
 
 	res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + mypage + '</body></html>');
 }
+//get the about page
 function getPageAbout(res) {
 	var head 		= fs.readFileSync(path + 'head.html', 'utf8');
 	var navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
@@ -1308,13 +1360,16 @@ function chainWrite_voteb(blameKey, value) {
 
 
 //CRYPTO
+//random number
 function getCryptoRandom(size){
 	const buf = Buffer.alloc(size);
 	return crypto.randomFillSync(buf).toString('hex');
 }
+//sha256
 function hashSHA256(text) {
 	return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
 }
+//aes (encryption)
 function encryptAES(text, key) {
 	const iv = crypto.randomBytes(16);
 	//ISO/IEC 10116:2017
@@ -1323,6 +1378,7 @@ function encryptAES(text, key) {
 	encrypted = Buffer.concat([encrypted, cipher.final()]);
 	return { iv: iv.toString('hex'), encryptedData: encrypted.toString('hex') };
 }
+//aes (decryption)
 function decryptAES(text, key, init_vector) {
 	let iv 				= Buffer.from(init_vector, 'hex');
 	let encryptedText   = Buffer.from(text, 'hex');
@@ -1331,11 +1387,13 @@ function decryptAES(text, key, init_vector) {
 	decrypted = Buffer.concat([decrypted, decipher.final()]);
 	return decrypted.toString();
 }
+//rsa (encryption)
 function encryptRSA(toEncrypt, publicKey) {
   const buffer = Buffer.from(toEncrypt, 'utf8')
   const encrypted = crypto.publicEncrypt(publicKey, buffer)
   return encrypted.toString('base64')
 }
+//rsa (decryption)
 function decryptRSA(toDecrypt, privateKey) {
   const buffer = Buffer.from(toDecrypt, 'base64')
   const decrypted = crypto.privateDecrypt(
@@ -1347,6 +1405,7 @@ function decryptRSA(toDecrypt, privateKey) {
   )
   return decrypted
 }
+//rsa key pair
 function calculateKeyPair(passphrase) {
 	const { generateKeyPairSync } = require('crypto');
 	return generateKeyPairSync('rsa', {

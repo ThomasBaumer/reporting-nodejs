@@ -1,5 +1,5 @@
 {
-  "name": "Incident Reporting",
+  "name": "incident-reporting-plattform",
   "version": "1.0.0",
   "description": "EOS Incident Reporting Frontend with Node.js",
   "author": "Thomas Baumer <thomas.baumer@stud.uni-regensburg.de>",
