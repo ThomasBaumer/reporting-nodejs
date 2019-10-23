@@ -11,8 +11,17 @@ module.exports = {
     load(site) {
         return fs.readFileSync(global.viewsdir + site + '.html', 'utf8');
     },
+    template_head() {
+        return fs.readFileSync(global.viewsdir + 'template_head.html', 'utf8');
+    },
+    template_footer() {
+        return fs.readFileSync(global.viewsdir + 'template_footer.html', 'utf8');
+    },
+
     deliver(res, sitecontent) {
-        res.send('<!DOCTYPE html><html lang="de">' + this.head() + '<body>' + this.navigation() + sitecontent + '</body></html>');
+        //res.send('<!DOCTYPE html><html lang="de">' + this.head() + '<body>' + this.navigation() + sitecontent + '</body></html>');
+        res.send(this.template_head() + sitecontent + this.template_footer());
+
     }
 
 
