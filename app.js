@@ -42,7 +42,7 @@ router.use(function (req, res, next) {
 
 //GET ENDPOINTS: MANAGE ROUTING
 router.get('/', function (req, res) {
-    res.redirect('/home');
+    res.redirect('/report');
 });
 router.get('/home', function (req, res) {
     c_home.getPageHome(res);
