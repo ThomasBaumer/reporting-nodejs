@@ -1,6 +1,7 @@
+const config = require('../config');
 const nav = require('./nav');
-const path = __dirname + '/views/';
-const site = path + "dashboard.html";
+const fs = require('fs');
+const site = "dashboard";
 const mongodb = require('../logic/mongodb');
 const chainwrite = require('../logic/chainwrite');
 const jsdom = require("jsdom");
@@ -107,7 +108,7 @@ module.exports = {
     loadPage(res, err, done) {
         // let head 		= fs.readFileSync(path + 'head.html', 'utf8');
         // let navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
-        let view = site;
+        let view = nav.load(site);
 
         if (err) {
             let message = "<div class='label-danger'>Interaktion fehlgeschlagen</div>" + err;
@@ -269,7 +270,7 @@ module.exports = {
             view = view_dom.serialize();
 
             //send page to user
-            nav.deliver(res, site);
+            nav.deliver(res, view);
             // res.send('<!DOCTYPE html><html lang="de">' + template.head() + '<body>' + template.navigation() + view + '</body></html>');
         }, function (err) {
             console.log(err);

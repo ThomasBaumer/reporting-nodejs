@@ -12,7 +12,7 @@ module.exports = {
     getPageViewDatabase(res, err, done) {
     // let head 		= fs.readFileSync(path + 'head.html', 'utf8');
     // let navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
-    let view 		= site;
+    let view 		= nav.load(site);
     let items 		= mongodb.read_item();
 
     if(err) {
@@ -89,7 +89,7 @@ module.exports = {
         view = view_dom.serialize();
 
         //send page to user
-        nav.deliver(res, site);
+        nav.deliver(res, view);
 
         // res.send('<!DOCTYPE html><html lang="de">' + head + '<body>' + navigation + view + '</body></html>');
     }, function(err) { console.log(err); });

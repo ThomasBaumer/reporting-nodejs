@@ -38,13 +38,20 @@ module.exports = {
 
     decryptRSA(toDecrypt, privateKey) {
         const buffer = Buffer.from(toDecrypt, 'base64');
+
+        // console.log(decrypted);
+        // console.log(decrypted);
+
         const decrypted = crypto.privateDecrypt(
             {
                 key: privateKey,
                 passphrase: config.passphrase_mongo,
             },
-            buffer,
+            buffer
         );
+
+        console.log(decrypted);
+
         return decrypted
     },
 
