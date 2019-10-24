@@ -13,6 +13,7 @@
   "dependencies": {
     "assert": "^1.4.1",
     "bigdecimal": "^0.6.1",
+    "ipfs-http-client": "^39.0.2",
     "eosjs": "^20.0.0",
     "eosjs-api": "^7.0.4",
     "express": "^4.16.4",
