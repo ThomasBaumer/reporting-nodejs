@@ -13,9 +13,19 @@
 </div>
 <!--   Core   -->
 <script src="assets/js/plugins/jquery/dist/jquery.min.js"></script>
+
 <script src="assets/js/plugins/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-<!--   Optional JS   -->
-<!--   Argon JS   -->
+
+<script type="text/javascript">
+    // jQuery(document).ready(function () {
+    jQuery("a").each(function () {
+        if ((window.location.pathname.indexOf($(this).attr('href'))) > -1) {
+            $(this).addClass('activeMenuItem');
+        }
+    });
+    // });
+</script>
+
 <script src="assets/js/argon-dashboard.min.js?v=1.1.0"></script>
 <script src="https://cdn.trackjs.com/agent/v3/latest/t.js"></script>
 <script>
