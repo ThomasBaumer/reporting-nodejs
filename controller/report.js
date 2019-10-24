@@ -7,6 +7,9 @@ const crypto = require('../logic/cryptofunctions');
 const jsdom = require("jsdom");
 const jquery = require("jquery");
 
+
+
+
 module.exports = {
 
     handleRequest(req, res) {

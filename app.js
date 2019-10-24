@@ -34,6 +34,9 @@ const c_blame = require('./controller/blame');
 const c_mypage = require('./controller/mypage');
 const c_about = require('./controller/about');
 
+
+
+
 router.use(function (req, res, next) {
     console.log('/' + req.method);
     next();
@@ -42,7 +45,7 @@ router.use(function (req, res, next) {
 
 //GET ENDPOINTS: MANAGE ROUTING
 router.get('/', function (req, res) {
-    res.redirect('/home');
+    res.redirect('/report');
 });
 router.get('/home', function (req, res) {
     c_home.getPageHome(res);
