@@ -37,8 +37,8 @@ module.exports = {
         users.then(function (result) {
 
             //assemble table
-            let table = '<table>';
-            table += '<tr><th>User</th><th>Kontostand</th><th>Status</th><th>Verifikator</th><th>Beschwerden</th><th>Eingefroren</th></tr>'
+            let table = '<table class="table align-items-center table-flush">';
+            table += '<tr><th>User</th><th>Balance</th><th>Status</th><th>Verificator</th><th>Complaints</th><th>Frozen</th></tr>'
             for (let i = 0; i < result.rows.length; i++) {
                 let row = result.rows[i];
                 let text = "";
@@ -55,14 +55,14 @@ module.exports = {
                 text = "Ja";
                 label = 'class="label-ok"';
                 if (JSON.stringify(row.verificator) == 0) {
-                    text = "Nein";
+                    text = "No";
                     label = 'class="label-danger"';
                 }
                 table += '<td><div ' + label + '>' + text + '</div></td>';
                 //Beschwerden
                 table += '<td>' + JSON.stringify(row.blames) + '</td>';
                 //Eingefroren
-                text = "Nein";
+                text = "No";
                 label = 'class="label-ok"';
                 if (JSON.stringify(row.frozen) == 1) {
                     text = "Ja";
@@ -74,7 +74,7 @@ module.exports = {
             //place table;
             let transfer_dom = new jsdom.JSDOM(transfer);
             let $ = jquery(transfer_dom.window);
-            $('p.users').html(table);
+            $('.table-responsive').html(table);
             transfer = transfer_dom.serialize();
 
             return nav.deliver(res, transfer);
