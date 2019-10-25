@@ -32,7 +32,7 @@ module.exports = {
 
     items.then( function(result) {
         //assemble table
-        let table = '<table class="table table-hover table-dark">';
+        let table = '<table class="table align-items-center table-flush">';
         table += '<tr><th>Titel</th><th>Beschreibung</th><th>Branche</th><th>Hash</th><th>Typ</th><th>Daten</th></tr>';
         for(let i = 0; i < result.length; i++) {
             let row = result[i];
@@ -85,7 +85,7 @@ module.exports = {
         //place table;
         let view_dom = new jsdom.JSDOM(view);
         let $ = jquery(view_dom.window);
-        $('p.items').html(table);
+        $('.table-responsive').html(table);
         view = view_dom.serialize();
 
         //send page to user

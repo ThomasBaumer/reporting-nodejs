@@ -100,7 +100,9 @@ module.exports = {
             blocksBehind: 3,
             expireSeconds: 30,
         });
-    }, report(hash, ancestor, incident, price, reward) {
+    }, report(hash, ancestor, price, reward) {
+        let incident = true;
+
         return api.transact({
             actions: [{
                 account: 'reporting',

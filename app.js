@@ -38,7 +38,7 @@ const c_about = require('./controller/about');
 
 
 router.use(function (req, res, next) {
-    console.log('/' + req.method);
+    // console.log('/' + req.method);
     next();
 });
 
@@ -78,18 +78,18 @@ router.get('/about', function (req, res) {
 app.use(express.static(path));
 app.use('/', router);
 
-app.listen(port, function () {
-    console.log(`
-██████╗ ███████╗██████╗  ██████╗ ██████╗ ████████╗██╗███╗   ██╗ ██████╗     ██╗    ██╗███████╗██████╗ ███████╗███████╗██████╗ ██╗   ██╗███████╗██████╗ 
-██╔══██╗██╔════╝██╔══██╗██╔═══██╗██╔══██╗╚══██╔══╝██║████╗  ██║██╔════╝     ██║    ██║██╔════╝██╔══██╗██╔════╝██╔════╝██╔══██╗██║   ██║██╔════╝██╔══██╗
-██████╔╝█████╗  ██████╔╝██║   ██║██████╔╝   ██║   ██║██╔██╗ ██║██║  ███╗    ██║ █╗ ██║█████╗  ██████╔╝███████╗█████╗  ██████╔╝██║   ██║█████╗  ██████╔╝
-██╔══██╗██╔══╝  ██╔═══╝ ██║   ██║██╔══██╗   ██║   ██║██║╚██╗██║██║   ██║    ██║███╗██║██╔══╝  ██╔══██╗╚════██║██╔══╝  ██╔══██╗╚██╗ ██╔╝██╔══╝  ██╔══██╗
-██║  ██║███████╗██║     ╚██████╔╝██║  ██║   ██║   ██║██║ ╚████║╚██████╔╝    ╚███╔███╔╝███████╗██████╔╝███████║███████╗██║  ██║ ╚████╔╝ ███████╗██║  ██║
-╚═╝  ╚═╝╚══════╝╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝╚═╝  ╚═══╝ ╚═════╝      ╚══╝╚══╝ ╚══════╝╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝  ╚═╝
-
-Interact with the webserver via localhost:8080.
-Don't forget to configure the config.json before starting the reporting webserver!`);
-});
+// app.listen(port, function () {
+//     console.log(`
+// ██████╗ ███████╗██████╗  ██████╗ ██████╗ ████████╗██╗███╗   ██╗ ██████╗     ██╗    ██╗███████╗██████╗ ███████╗███████╗██████╗ ██╗   ██╗███████╗██████╗
+// ██╔══██╗██╔════╝██╔══██╗██╔═══██╗██╔══██╗╚══██╔══╝██║████╗  ██║██╔════╝     ██║    ██║██╔════╝██╔══██╗██╔════╝██╔════╝██╔══██╗██║   ██║██╔════╝██╔══██╗
+// ██████╔╝█████╗  ██████╔╝██║   ██║██████╔╝   ██║   ██║██╔██╗ ██║██║  ███╗    ██║ █╗ ██║█████╗  ██████╔╝███████╗█████╗  ██████╔╝██║   ██║█████╗  ██████╔╝
+// ██╔══██╗██╔══╝  ██╔═══╝ ██║   ██║██╔══██╗   ██║   ██║██║╚██╗██║██║   ██║    ██║███╗██║██╔══╝  ██╔══██╗╚════██║██╔══╝  ██╔══██╗╚██╗ ██╔╝██╔══╝  ██╔══██╗
+// ██║  ██║███████╗██║     ╚██████╔╝██║  ██║   ██║   ██║██║ ╚████║╚██████╔╝    ╚███╔███╔╝███████╗██████╔╝███████║███████╗██║  ██║ ╚████╔╝ ███████╗██║  ██║
+// ╚═╝  ╚═╝╚══════╝╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝╚═╝  ╚═══╝ ╚═════╝      ╚══╝╚══╝ ╚══════╝╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝  ╚═╝
+//
+// Interact with the webserver via localhost:8080.
+// Don't forget to configure the config.json before starting the reporting webserver!`);
+// });
 
 
 //POST ENDPOINTS: MANAGE FORMS
@@ -122,10 +122,38 @@ app.post('/orders', (req, res) => {
 
 
 
+const fetch = require('node-fetch');
+const { TextEncoder, TextDecoder } = require('util');
+const {Api, JsonRpc, RpcError} = require('eosjs');
+const {JsSignatureProvider} = require('eosjs/dist/eosjs-jssig');
+const signatureProvider = new JsSignatureProvider([config.privateKey_eos]);
+const rpc = new JsonRpc('http://' + config.Nodeos.ip + ':' + config.Nodeos.port, { fetch });
+const api = new Api({rpc, signatureProvider, textDecoder: new TextDecoder(), textEncoder: new TextEncoder()});
 
 
+transfer("bsi", 1);
 
 
+function  transfer(to, amount) {
+    return api.transact({
+        actions: [{
+            account: 'reporting',
+            name: 'transfer',
+            authorization: [{
+                actor: config.user,
+                permission: 'active',
+            }],
+            data: {
+                from: config.user,
+                to: to,
+                amount: amount,
+            },
+        }]
+    }, {
+        blocksBehind: 3,
+        expireSeconds: 30,
+    });
+};
 
 
 

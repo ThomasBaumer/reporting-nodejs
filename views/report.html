@@ -1,11 +1,11 @@
-
 <nav class="navbar navbar-top navbar-expand-md navbar-dark" id="navbar-main">
     <div class="container-fluid">
         <a class="h4 mb-0 text-white text-uppercase d-none d-lg-inline-block">Report Incident</a>
     </div>
 </nav>
 <!-- Header -->
-<div class="header pb-8 pt-5 pt-lg-8 d-flex align-items-center" style="min-height: 300px; background-image: url(../assets/img/theme/profile-cover.jpg); background-size: cover; background-position: center top;">
+<div class="header pb-8 pt-5 pt-lg-8 d-flex align-items-center"
+     style="min-height: 300px; background-image: url(../assets/img/theme/profile-cover.jpg); background-size: cover; background-position: center top;">
     <!-- Mask -->
     <span class="mask bg-gradient-default opacity-8"></span>
     <!-- Header container -->
@@ -30,20 +30,23 @@
                     </div>
                 </div>
                 <div class="card-body">
-                    <form>
+                    <form action="/report" method="post">
                         <h6 class="heading-small text-muted mb-4">Basic information</h6>
                         <div class="pl-lg-4">
                             <div class="row">
                                 <div class="col-lg-6">
                                     <div class="form-group">
                                         <label class="form-control-label" for="input-username">Title</label>
-                                        <input type="text" id="input-username" class="form-control form-control-alternative" placeholder="report title" value="">
+                                        <input type="text" name="incidentTitle"
+                                               class="form-control form-control-alternative" placeholder="report title"
+                                               value="">
                                     </div>
                                 </div>
                                 <div class="col-lg-6">
                                     <div class="form-group">
                                         <label class="form-control-label" for="input-email">Description</label>
-                                        <input type="email" id="input-email" class="form-control form-control-alternative" placeholder="description">
+                                        <input id="input-email" class="form-control form-control-alternative" name="incidentDesc"
+                                               placeholder="description">
                                     </div>
                                 </div>
                             </div>
@@ -58,9 +61,12 @@
                                             <option value="Energie">Energy</option>
                                             <option value="Staat und Verwaltung">Administration</option>
                                             <option value="Medien und Kultur">Media and Culture</option>
-                                            <option value="Finanz- und Versicherungswesen">Finance- and Insurance</option>
+                                            <option value="Finanz- und Versicherungswesen">Finance- and Insurance
+                                            </option>
                                             <option value="Ernährung">Food Industry</option>
-                                            <option value="Informationstechnik und Telekommunikation">IT and Telecomunication</option>
+                                            <option value="Informationstechnik und Telekommunikation">IT and
+                                                Telecomunication
+                                            </option>
                                             <option value="Wasser">Water supply</option>
                                             <option value="Transport und Verkehr">Transportation and Traffic</option>
                                         </select>
@@ -68,7 +74,7 @@
                                 </div>
                             </div>
                         </div>
-                        <hr class="my-4" />
+                        <hr class="my-4"/>
                         <!-- Address -->
                         <h6 class="heading-small text-muted mb-4">Structured Incident Information</h6>
                         <div class="pl-lg-4">
@@ -77,13 +83,16 @@
                                     <div class="form-group">
                                         <label class="form-control-label" for="input-address">STIX Contents</label>
 
-                                        <textarea rows="10" id="input-address" class="form-control form-control-alternative" placeholder="STIX Contents" value="Bld Mihail Kogalniceanu, nr. 8 Bl 1, Sc 1, Ap 09" type="text"></textarea>
+                                        <textarea rows="10" id="input-address" name="incidentData"
+                                                  class="form-control form-control-alternative"
+                                                  placeholder="STIX Contents"
+                                        ></textarea>
                                     </div>
                                 </div>
                             </div>
 
                         </div>
-                        <hr class="my-4" />
+                        <hr class="my-4"/>
                         <!-- Description -->
                         <h6 class="heading-small text-muted mb-4">About me</h6>
                         <div class="pl-lg-4">
@@ -93,30 +102,46 @@
                                     <div class="col-lg-4">
                                         <div class="form-group">
                                             <label class="form-control-label" for="input-city">Predecessor</label>
-                                            <input type="text" id="input-city" class="form-control form-control-alternative" placeholder="Predecessor" value="1">
+                                            <input type="number" id="input-city" name="incidentAncestor"
+                                                   class="form-control form-control-alternative"
+                                                   placeholder="Predecessor" value="1">
                                         </div>
                                     </div>
                                     <div class="col-lg-4">
                                         <div class="form-group">
                                             <label class="form-control-label" for="input-country">Price</label>
-                                            <input type="text" id="input-country" class="form-control form-control-alternative" placeholder="Price" value="12">
+                                            <input type="number" id="input-country" name="incidentPrice"
+                                                   class="form-control form-control-alternative" placeholder="Price"
+                                                   value="12">
                                         </div>
                                     </div>
                                     <div class="col-lg-4">
                                         <div class="form-group">
                                             <label class="form-control-label" for="input-country">Verify-reward</label>
-                                            <input type="number" id="input-postal-code" class="form-control form-control-alternative" placeholder="">
+                                            <input type="number" id="input-postal-code" name="incidentReward"
+                                                   class="form-control form-control-alternative" placeholder="">
                                         </div>
+                                    </div>
+                                    <div class="col-lg-4"></div>
+                                    <div class="col-lg-4"></div>
+                                    <div class="col-lg-4">
+                                        <input class="btn btn-primary btn-lg float-right" type="submit"
+                                               value="Datenanalyse berichten">
                                     </div>
                                 </div>
 
                             </div>
 
+                        </div>
                     </form>
                 </div>
             </div>
         </div>
-    </div>
 
+    </div>
+    <div class="row">
+        <div class="col-lg-12">
+            <p class="error"></p>
+        </div>
+    </div>
 </div>
-      

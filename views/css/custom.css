@@ -5,3 +5,14 @@
 .endpointcontainer table{
 margin: 0 auto;
 }
+
+body{
+    background-color: whitesmoke;
+}
+
+.bg-secondary{
+    background-color: ghostwhite !important;
+}
+.form-control-alternative {
+    box-shadow: 0 1px 3px rgba(50, 50, 93, 0.2), 0 1px 0 rgba(0, 0, 0, 0.15);
+}

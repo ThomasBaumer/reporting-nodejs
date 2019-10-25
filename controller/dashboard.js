@@ -94,9 +94,9 @@ module.exports = {
             }
 
             //generate the new page
-            promise.then( (result)=> {
+            promise.then((result) => {
                 this.loadPage(res, false, true);
-            },  (err) =>{
+            }, (err) => {
                 this.loadPage(res, err);
             });
         }
@@ -111,14 +111,14 @@ module.exports = {
         let view = nav.load(site);
 
         if (err) {
-            let message = "<div class='label-danger'>Interaktion fehlgeschlagen</div>" + err;
+            let message = "<div class='bg-danger'>Interaktion fehlgeschlagen</div>" + err;
             let view_error_dom = new jsdom.JSDOM(view);
             let $ = jquery(view_error_dom.window);
             $('p.error').html(message);
             view = view_error_dom.serialize();
         }
         if (done) {
-            let message = "<div class='label-ok'>Interaktion erfolgreich</div>";
+            let message = "<div class='bg-succes'>Interaktion erfolgreich</div>";
             let view_error_dom = new jsdom.JSDOM(view);
             let $ = jquery(view_error_dom.window);
             $('p.error').html(message);
@@ -130,8 +130,21 @@ module.exports = {
         items.then(function (result) {
 
             //assemble table
-            let table = '<table class="table table-hover table-dark">';
-            table += '<tr><th>#</th><th>Hash</th><th>Typ</th><th>#-Link</th><th>Reporter</th><th>Rating</th><th>Preis</th><th>Belohnung</th><th>Status</th><th>Votes</th><th>BSI-OK</th><th>Aktion</th></tr>'
+            let table = '<table class="table align-items-center table-flush">';
+            table += '<tr>' +
+                '<th>#</th>' +
+                '<th>Hash</th>' +
+                '<th>Typ</th>' +
+                // '<th>#-Link</th>'+
+                '<th>Reporter</th>' +
+                '<th>Rating</th>' +
+                '<th>Preis</th>' +
+                '<th>Belohnung</th>' +
+                '<th>Status</th>' +
+                '<th>Votes</th>' +
+                '<th>BSI-OK</th>' +
+                '<th>Aktion</th>' +
+                '</tr>';
             for (let i = 0; i < result.rows.length; i++) {
                 let row = result.rows[i];
                 let text = "";
@@ -159,7 +172,7 @@ module.exports = {
                 let hash = JSON.stringify(row.hash).substring(1, JSON.stringify(row.hash).length - 1);
                 table += '<td>' + hash.slice(0, hash.length / 2) + '<br>' + hash.slice(hash.length / 2) + '</td>';
                 //Typ
-                text = "Vorfall";
+                text = "Incident";
                 label = 'class="label-primary"';
                 if (JSON.stringify(row.incident) == 0) {
                     text = "<b>Datenanalyse</b>";
@@ -167,13 +180,13 @@ module.exports = {
                 }
                 table += '<td><div ' + label + '>' + text + '</div></td>';
                 //parent Link
-                table += '<td>' + JSON.stringify(row.parentLink) + '</td>';
+                // table += '<td>' + JSON.stringify(row.parentLink) + '</td>';
                 //reporter
                 table += '<td>' + JSON.stringify(row.reporter).substring(1, JSON.stringify(row.reporter).length - 1) + '</td>';
 
                 //rating
                 label = 'class="label-attention"';
-                text = 'schwebend';
+                text = 'pending';
                 if (state == "accepted") {
                     label = 'class="label-ok"';
                     let rating = JSON.stringify(row.rating).substring(1, JSON.stringify(row.rating).length - 1);
@@ -238,7 +251,7 @@ module.exports = {
                             table += '<input name="setvoters-btn" class="btn btn-success btn-sm btn-block" type="submit" value="Voting planen" style="margin-bottom:5px">';
                         }
                         table += '<input id="price" name="price" type="number" min=0 max=1000 value=10 /> ';
-                        table += '<input name= "price-btn" class="btn btn-danger btn-sm" type="submit" value="Preis setzen">';
+                        table += '<input name= "price-btn" class="btn btn-success btn-sm" type="submit" value="set">';
                     } else {
                         if (state === "accepted") {
                             table += '<input name="order-btn" class="btn btn-primary btn-sm btn-block" type="submit" value="Bestellen">';
@@ -266,7 +279,7 @@ module.exports = {
             //place table;
             let view_dom = new jsdom.JSDOM(view);
             let $ = jquery(view_dom.window);
-            $('p.items').html(table);
+            $('.table-responsive').html(table);
             view = view_dom.serialize();
 
             //send page to user
