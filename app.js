@@ -34,11 +34,8 @@ const c_blame = require('./controller/blame');
 const c_mypage = require('./controller/mypage');
 const c_about = require('./controller/about');
 
-
-
-
 router.use(function (req, res, next) {
-    // console.log('/' + req.method);
+    console.log('/' + req.method);
     next();
 });
 
@@ -119,49 +116,54 @@ app.post('/orders', (req, res) => {
     c_orders.handleRequest(req, res);
 });
 
+var ipfsClient = require('ipfs-http-client')
+const ipfs = ipfsClient({ host: '132.199.123.57', port: '5001', protocol: 'http' })
+const ipfs2 = ipfsClient({ host: '132.199.123.236', port: '5001', protocol: 'http' })
 
+doStuff();
 
+async function doStuff(){
+    let itemId = "abc";
+    let fileKey = [{ id: "abc", file: "def"},{ id: "abc2", file: "def2"}]
+    // let fileKeys = 	{
+    //     path: "/keys/def", // The file path
+    //     content: Buffer.from(JSON.stringify(fileKey))
+    // };
+    // await ipfs.files.mkdir("/user/keys", { parents: true })
+    // await ipfs.files.mkdir("/user/items");
 
-const fetch = require('node-fetch');
-const { TextEncoder, TextDecoder } = require('util');
-const {Api, JsonRpc, RpcError} = require('eosjs');
-const {JsSignatureProvider} = require('eosjs/dist/eosjs-jssig');
-const signatureProvider = new JsSignatureProvider([config.privateKey_eos]);
-const rpc = new JsonRpc('http://' + config.Nodeos.ip + ':' + config.Nodeos.port, { fetch });
-const api = new Api({rpc, signatureProvider, textDecoder: new TextDecoder(), textEncoder: new TextEncoder()});
+    // let user = await ipfs.files.stat("/user");
+    // console.log(user);
+    // let res = await ipfs.name.publish(user.hash)
+    // console.log(res)
 
+    let res = await ipfs2.name.resolve("QmYZ6jNzSSXnWDVC4RCYN4RtMEMn3KpqmWYMpqRe76saE4");
 
-transfer("bsi", 1);
+    res = await ipfs2.ls(res + '/keys')
+    console.log(res)
+    // let path = "/user/items"
+    // let res = await ipfs.files.ls(path);
+    // console.log(res)
 
+    // let stats = await ipfs.files.stat(path).catch((err) => {
+    //     ipfs.files.mkdir(path, {parents: true}).then(() => {
+    //         return ipfs.files.stat(path);
+    //     });
+    // }).then((res) => { console.log(res) });
 
-function  transfer(to, amount) {
-    return api.transact({
-        actions: [{
-            account: 'reporting',
-            name: 'transfer',
-            authorization: [{
-                actor: config.user,
-                permission: 'active',
-            }],
-            data: {
-                from: config.user,
-                to: to,
-                amount: amount,
-            },
-        }]
-    }, {
-        blocksBehind: 3,
-        expireSeconds: 30,
-    });
-};
-
-
-
-
-
-
-
-
-
-
-
+    //await ipfs.files.write("/user/items/" + itemId,Buffer.from(JSON.stringify(fileKey)), {create: true})
+    //let result = await ipfs.files.stat("/usr"); console.log(result);
+    // let result = await ipfs.files.stat("/usr", (err, res) => {
+    //    if(err) console.log("hi");
+    //    else console.log(res);
+    // });
+    // console.log(result)
+    // result = await ipfs.files.stat("/keys"); console.log(result);
+}
+// let res = ipfs.files.read("/test", (error, buf) => {
+//     console.log(buf.toString('utf8'))
+// })
+// ipfs.files.write("/test", Buffer.from('Hello, world 2!'))
+// res = ipfs.files.read("/test", (error, buf) => {
+//     console.log(buf.toString('utf8'))
+// })

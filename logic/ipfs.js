@@ -1,13 +1,51 @@
+const config = require('../config');
 var ipfsClient = require('ipfs-http-client')
-const ipfs = ipfsClient({ host: '132.199.123.57', port: '5001', protocol: 'http' })
+const ipfs = ipfsClient({
+    host: config.IPFS.ip,
+    port: config.IPFS.port,
+    protocol: 'http'
+});
 
 const chain = require('./chainread');
 
+/**
+ * Write a single JS object to an IPFS path
+ * @param path
+ * @param json JS object to convert to json
+ * @returns {Promise<Promise|boolean|*|Boolean|void>}
+ */
+async function writeJson(path, json){
+    return ipfs.files.write(path,
+        Buffer.from(JSON.stringify(json)),
+        {create: true, parents: true});
+}
+
+/**
+ * Republish IPNS entry and update pin
+ */
+async function updateFeed(){
+    let stat = await ipfs.files.stat("/user");
+    return Promise.all(
+        ipfs.name.publish(stat.hash),
+        ipfs.pin.add(stat.hash)
+    );
+}
+
+//for a single user, retrieve all items
+async function resolveAndGet(user){
+    user.peerId = "QmYZ6jNzSSXnWDVC4RCYN4RtMEMn3KpqmWYMpqRe76saE4" //fixed name for .57 for testing
+    let dir = await ipfs.name.resolve(user.peerId);
+    let files = await ipfs.ls(dir);
+
+    //get all files
+}
+
 module.exports = {
 
+
     read_item() {
-        let items = chain.items();
-        return Promise.all(items.map(ipfs.get));
+        let users = chain.users();
+        return Promise.all(users.map(resolveAndGet));
     },
 
     read_item_byID(hash) {
@@ -16,24 +54,21 @@ module.exports = {
         });
     },
 
-    write_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, init_vector, isIncident, title, description, industry, bsig) {
-        let doc;
-        if(bsig) {
-            doc = {
-                _id:hashEncryptedData, encryptedData:encryptedData,
-                fileKeys: [ { encryptedFileKey:encryptedFileKey, user:config.user }, { encryptedFileKey:encryptedFileKeyBSI, user:"bsi" } ], init_vector:init_vector,
-                itemType:isIncident, title:title,  description:description, industry:industry
-            };
-        }
-        else {
-            doc = {
-                _id:hashEncryptedData, encryptedData:encryptedData,
-                fileKeys: [ { encryptedFileKey:encryptedFileKey, user:config.user } ], init_vector:init_vector,
-                itemType:isIncident, title:title, description:description, industry:industry
-            }
-        }
+    async write_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, init_vector, isIncident, title, description, industry, bsig) {
+        let incident =  {
+            _id:hashEncryptedData, encryptedData:encryptedData, init_vector:init_vector,
+            itemType:isIncident, title:title, description:description, industry:industry
+        };
+        let fileKey = [ { encryptedFileKey:encryptedFileKey, user:config.user } ];
 
-        return ipfs.add(doc);
+        if(bsig) fileKey.push({ encryptedFileKey:encryptedFileKeyBSI, user:"bsi" });
+
+        await Promise.all(
+            writeJson("/user/items/" + hashEncryptedData, incident),
+            writeJson("/user/keys/" + hashEncryptedData, fileKey)
+        );
+
+        await updateFeed();
     },
 
     write_addEncryptedFileKey(hash, user, encryptedFileKey) {
