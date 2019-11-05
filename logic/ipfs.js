@@ -6,6 +6,9 @@ const ipfs = ipfsClient({
     protocol: 'http'
 });
 
+const itemsPath = "/user/items/";
+const keysPath = "/user/keys/";
+
 const chain = require('./chainread');
 
 /**
@@ -20,6 +23,13 @@ async function writeJson(path, json){
         {create: true, parents: true});
 }
 
+async function readJson(path) {
+    let res = await ipfs.get(path);
+    return res.length === 1 ?
+        JSON.parse(res.toString()) :
+        res.slice(1).map(c => JSON.parse(c.content.toString()));
+}
+
 /**
  * Republish IPNS entry and update pin
  */
@@ -30,28 +40,38 @@ async function updateFeed(){
         ipfs.pin.add(stat.hash)
     );
 }
-
 //for a single user, retrieve all items
-async function resolveAndGet(user){
-    user.peerId = "QmYZ6jNzSSXnWDVC4RCYN4RtMEMn3KpqmWYMpqRe76saE4" //fixed name for .57 for testing
+async function getUserItems(user){
+    user.peerId = "QmYZ6jNzSSXnWDVC4RCYN4RtMEMn3KpqmWYMpqRe76saE4" //fixed name for .57 ip for testing
     let dir = await ipfs.name.resolve(user.peerId);
-    let files = await ipfs.ls(dir);
+    let items = await readJson(dir + '/items/');
+    let keys = await readJson(dir + '/keys/')
 
-    //get all files
+    //add each key to items by _id
+    keys.forEach(key => {
+        let item = items.find(item => {
+            return key._id === item._id;
+        });
+        if(item) item.fileKeys = key.fileKeys;
+    });
+
+    return items;
 }
 
 module.exports = {
 
 
-    read_item() {
+    async read_item() {
         let users = chain.users();
-        return Promise.all(users.map(resolveAndGet));
+        return Promise.all(users.map(getUserItems));
     },
 
-    read_item_byID(hash) {
-        ipfs.get(hash).then((item) => {
-            return item;
-        });
+    async read_item_byID(user, hash) {
+        let dir = await ipfs.name.resolve(user.peerId);
+        let item = await readJson(dir + '/items/' + hash);
+        let key = await readJson(dir + '/keys/' + hash);
+        item.fileKeys = key;
+        return item;
     },
 
     async write_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, init_vector, isIncident, title, description, industry, bsig) {
@@ -64,20 +84,21 @@ module.exports = {
         if(bsig) fileKey.push({ encryptedFileKey:encryptedFileKeyBSI, user:"bsi" });
 
         await Promise.all(
-            writeJson("/user/items/" + hashEncryptedData, incident),
-            writeJson("/user/keys/" + hashEncryptedData, fileKey)
+            writeJson(itemsPath + hashEncryptedData, incident),
+            writeJson(keysPath + hashEncryptedData, fileKey)
         );
 
         await updateFeed();
     },
 
-    write_addEncryptedFileKey(hash, user, encryptedFileKey) {
+    async write_addEncryptedFileKey(hash, user, encryptedFileKey) {
         //update id (hash) with encryptedFileKey
-        let json = {encryptedFileKey: encryptedFileKey, user: user};
+        let entry = {encryptedFileKey: encryptedFileKey, user: user};
+        let path = keysPath + hash;
 
-        //upload fileKey to IPFS (don't pin) and return hash
-        ipfs.add(json).then((hash) => {
-            return hash;
-        });
+        let json = await readJson(path);
+        json.fileKeys.push(entry);
+
+        return writeJson(path, json);
     }
 };

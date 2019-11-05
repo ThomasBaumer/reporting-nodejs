@@ -124,7 +124,7 @@ doStuff();
 
 async function doStuff(){
     let itemId = "abc";
-    let fileKey = [{ id: "abc", file: "def"},{ id: "abc2", file: "def2"}]
+    let fileKey = {hash: "0abdef", fileKeys: [{ id: "abc", file: "def"},{ id: "abc2", file: "def2"}]}
     // let fileKeys = 	{
     //     path: "/keys/def", // The file path
     //     content: Buffer.from(JSON.stringify(fileKey))
@@ -137,11 +137,21 @@ async function doStuff(){
     // let res = await ipfs.name.publish(user.hash)
     // console.log(res)
 
-    let res = await ipfs2.name.resolve("QmYZ6jNzSSXnWDVC4RCYN4RtMEMn3KpqmWYMpqRe76saE4");
+    //let res = await ipfs2.ls('QmdusHdrWSgSrm43AK9G2KpWsWV2m4Xe4THjn1mvqz2mYV/items')
+    //let files = res.map(f => f.name); //extract list of hashes
 
-    res = await ipfs2.ls(res + '/keys')
-    console.log(res)
-    // let path = "/user/items"
+    let items = [{_id: 'abc', fruit: "grape"},{_id: 'def', fruit: "grape"}]
+    let keys = [{_id: 'abc', fileKeys: [{key: "a"}, {key:"b"}]}, {_id: 'abce', fileKeys: [{key: "a"}, {key:"b"}]}]
+    keys.forEach(key => {
+        let item = items.find(item => {
+            return key._id === item._id;
+        });
+        if(item) item.fileKeys = key.fileKeys;
+    });
+
+    console.log(items)
+    //console.log(JSON.parse(file[0].content.toString()));
+
     // let res = await ipfs.files.ls(path);
     // console.log(res)
 
@@ -151,8 +161,8 @@ async function doStuff(){
     //     });
     // }).then((res) => { console.log(res) });
 
-    //await ipfs.files.write("/user/items/" + itemId,Buffer.from(JSON.stringify(fileKey)), {create: true})
-    //let result = await ipfs.files.stat("/usr"); console.log(result);
+    //await ipfs.files.write("/user/keys/" + itemId,Buffer.from(JSON.stringify(fileKey)), {create: true})
+    //let result = await ipfs.files.stat("/user"); console.log(result);
     // let result = await ipfs.files.stat("/usr", (err, res) => {
     //    if(err) console.log("hi");
     //    else console.log(res);
