@@ -12,8 +12,8 @@ const keysPath = "/user/keys/";
 const chain = require('./chainread');
 
 /**
- * Write a single JS object to an IPFS path
- * @param path
+ * Write a single JS object to a JSON file in a local IPFS path (MFS)
+ * @param path Path to IPFS folder
  * @param json JS object to convert to json
  * @returns {Promise<Promise|boolean|*|Boolean|void>}
  */
@@ -23,11 +23,36 @@ async function writeJson(path, json){
         {create: true, parents: true});
 }
 
+/**
+ * Read a single JSON items from an IPFS path
+ * @param path Path to IPFS file
+ * @returns {Promise<*>}
+ */
 async function readJson(path) {
+    let res = await ipfs.files.read(path);
+    return JSON.parse(res.toString());
+}
+
+/**
+ * Read all JSON items from an IPFS path
+ * @param path Path to IPFS directory
+ * @returns {Promise<*>}
+ */
+async function readJsonDir(path){
     let res = await ipfs.get(path);
-    return res.length === 1 ?
-        JSON.parse(res.toString()) :
-        res.slice(1).map(c => JSON.parse(c.content.toString()));
+    return res.slice(1).map(c => JSON.parse(c.content.toString()))
+}
+
+/**
+ * Resolves an IPNS entry and pins it locally
+ * @param ipns
+ * @returns {Promise<void|string>}
+ */
+async function resolveAndPin(ipns){
+    ipns = "QmYZ6jNzSSXnWDVC4RCYN4RtMEMn3KpqmWYMpqRe76saE4" //TODO: fixed name for .57 ip for testing. Remove line once chain ipns col is implemented
+    let dir = await ipfs.name.resolve(ipns);
+    await ipfs.pin.add(ipns, { recursive: false }); //recursive:true would pin all items of that user. Future: ipfs name follow?
+    return dir;
 }
 
 /**
@@ -35,17 +60,22 @@ async function readJson(path) {
  */
 async function updateFeed(){
     let stat = await ipfs.files.stat("/user");
-    return Promise.all(
+    console.log('directory: ' + stat.hash)
+    return Promise.all([
         ipfs.name.publish(stat.hash),
         ipfs.pin.add(stat.hash)
-    );
+    ]);
 }
-//for a single user, retrieve all items
+
+/**
+ * Retrieve all IPFS items stored under a single user's IPNS entry
+ * @param user Blockchain user entry
+ * @returns {Promise<*>}
+ */
 async function getUserItems(user){
-    user.peerId = "QmYZ6jNzSSXnWDVC4RCYN4RtMEMn3KpqmWYMpqRe76saE4" //fixed name for .57 ip for testing
-    let dir = await ipfs.name.resolve(user.peerId);
-    let items = await readJson(dir + '/items/');
-    let keys = await readJson(dir + '/keys/')
+    let dir = resolveAndPin(user.ipns);
+    let items = await readJsonDir(dir + '/items/');
+    let keys = await readJsonDir(dir + '/keys/')
 
     //add each key to items by _id
     keys.forEach(key => {
@@ -58,35 +88,41 @@ async function getUserItems(user){
     return items;
 }
 
+
 module.exports = {
 
-
     async read_item() {
-        let users = chain.users();
-        return Promise.all(users.map(getUserItems));
+        return getUserItems(config.user);
+    },
+
+    async read_all_items() {
+        let users = (await chain.users()).rows;
+        return [].concat.apply([],
+          await Promise.all(users.map(getUserItems))
+        );
     },
 
     async read_item_byID(user, hash) {
-        let dir = await ipfs.name.resolve(user.peerId);
+        let dir = resolveAndPin(user.ipns);
         let item = await readJson(dir + '/items/' + hash);
         let key = await readJson(dir + '/keys/' + hash);
         item.fileKeys = key;
         return item;
     },
 
-    async write_report(encryptedData, hashEncryptedData, encryptedFileKey, encryptedFileKeyBSI, init_vector, isIncident, title, description, industry, bsig) {
+    async write_report(encryptedData, hashEncryptedData, encryptedFileKey, init_vector, itemType, title, description, industry, encryptedFileKeyBSI) {
         let incident =  {
             _id:hashEncryptedData, encryptedData:encryptedData, init_vector:init_vector,
-            itemType:isIncident, title:title, description:description, industry:industry
+            itemType:itemType, title:title, description:description, industry:industry
         };
-        let fileKey = [ { encryptedFileKey:encryptedFileKey, user:config.user } ];
+        let fileKey = { _id: hashEncryptedData, fileKeys: [{ encryptedFileKey:encryptedFileKey, user:config.user }] };
 
-        if(bsig) fileKey.push({ encryptedFileKey:encryptedFileKeyBSI, user:"bsi" });
+        if(encryptedFileKeyBSI) fileKey.fileKeys.push({ encryptedFileKey:encryptedFileKeyBSI, user:"bsi" });
 
-        await Promise.all(
+        await Promise.all([
             writeJson(itemsPath + hashEncryptedData, incident),
             writeJson(keysPath + hashEncryptedData, fileKey)
-        );
+        ]);
 
         await updateFeed();
     },
@@ -99,6 +135,7 @@ module.exports = {
         let json = await readJson(path);
         json.fileKeys.push(entry);
 
-        return writeJson(path, json);
+        await writeJson(path, json);
+        await updateFeed();
     }
 };

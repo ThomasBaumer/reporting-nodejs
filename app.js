@@ -16,13 +16,6 @@ const router = express.Router();
 const path = __dirname + '/views/';
 const port = 8080;
 
-
-//logic
-const crypto = require('./logic/cryptofunctions');
-const chainwrite = require('./logic/chainwrite');
-const chainread = require('./logic/chainread');
-const mongodb = require('./logic/mongodb');
-
 //controller
 const c_home = require('./controller/home');
 const c_report = require('./controller/report');
@@ -75,18 +68,18 @@ router.get('/about', function (req, res) {
 app.use(express.static(path));
 app.use('/', router);
 
-// app.listen(port, function () {
-//     console.log(`
-// ██████╗ ███████╗██████╗  ██████╗ ██████╗ ████████╗██╗███╗   ██╗ ██████╗     ██╗    ██╗███████╗██████╗ ███████╗███████╗██████╗ ██╗   ██╗███████╗██████╗
-// ██╔══██╗██╔════╝██╔══██╗██╔═══██╗██╔══██╗╚══██╔══╝██║████╗  ██║██╔════╝     ██║    ██║██╔════╝██╔══██╗██╔════╝██╔════╝██╔══██╗██║   ██║██╔════╝██╔══██╗
-// ██████╔╝█████╗  ██████╔╝██║   ██║██████╔╝   ██║   ██║██╔██╗ ██║██║  ███╗    ██║ █╗ ██║█████╗  ██████╔╝███████╗█████╗  ██████╔╝██║   ██║█████╗  ██████╔╝
-// ██╔══██╗██╔══╝  ██╔═══╝ ██║   ██║██╔══██╗   ██║   ██║██║╚██╗██║██║   ██║    ██║███╗██║██╔══╝  ██╔══██╗╚════██║██╔══╝  ██╔══██╗╚██╗ ██╔╝██╔══╝  ██╔══██╗
-// ██║  ██║███████╗██║     ╚██████╔╝██║  ██║   ██║   ██║██║ ╚████║╚██████╔╝    ╚███╔███╔╝███████╗██████╔╝███████║███████╗██║  ██║ ╚████╔╝ ███████╗██║  ██║
-// ╚═╝  ╚═╝╚══════╝╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝╚═╝  ╚═══╝ ╚═════╝      ╚══╝╚══╝ ╚══════╝╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝  ╚═╝
-//
-// Interact with the webserver via localhost:8080.
-// Don't forget to configure the config.json before starting the reporting webserver!`);
-// });
+app.listen(port, function () {
+    console.log(`
+██████╗ ███████╗██████╗  ██████╗ ██████╗ ████████╗██╗███╗   ██╗ ██████╗     ██╗    ██╗███████╗██████╗ ███████╗███████╗██████╗ ██╗   ██╗███████╗██████╗
+██╔══██╗██╔════╝██╔══██╗██╔═══██╗██╔══██╗╚══██╔══╝██║████╗  ██║██╔════╝     ██║    ██║██╔════╝██╔══██╗██╔════╝██╔════╝██╔══██╗██║   ██║██╔════╝██╔══██╗
+██████╔╝█████╗  ██████╔╝██║   ██║██████╔╝   ██║   ██║██╔██╗ ██║██║  ███╗    ██║ █╗ ██║█████╗  ██████╔╝███████╗█████╗  ██████╔╝██║   ██║█████╗  ██████╔╝
+██╔══██╗██╔══╝  ██╔═══╝ ██║   ██║██╔══██╗   ██║   ██║██║╚██╗██║██║   ██║    ██║███╗██║██╔══╝  ██╔══██╗╚════██║██╔══╝  ██╔══██╗╚██╗ ██╔╝██╔══╝  ██╔══██╗
+██║  ██║███████╗██║     ╚██████╔╝██║  ██║   ██║   ██║██║ ╚████║╚██████╔╝    ╚███╔███╔╝███████╗██████╔╝███████║███████╗██║  ██║ ╚████╔╝ ███████╗██║  ██║
+╚═╝  ╚═╝╚══════╝╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝╚═╝  ╚═══╝ ╚═════╝      ╚══╝╚══╝ ╚══════╝╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝  ╚═╝
+
+Interact with the webserver via localhost:8080.
+Don't forget to configure the config.json before starting the reporting webserver!`);
+});
 
 
 //POST ENDPOINTS: MANAGE FORMS
@@ -139,17 +132,17 @@ async function doStuff(){
 
     //let res = await ipfs2.ls('QmdusHdrWSgSrm43AK9G2KpWsWV2m4Xe4THjn1mvqz2mYV/items')
     //let files = res.map(f => f.name); //extract list of hashes
-
-    let items = [{_id: 'abc', fruit: "grape"},{_id: 'def', fruit: "grape"}]
-    let keys = [{_id: 'abc', fileKeys: [{key: "a"}, {key:"b"}]}, {_id: 'abce', fileKeys: [{key: "a"}, {key:"b"}]}]
-    keys.forEach(key => {
-        let item = items.find(item => {
-            return key._id === item._id;
-        });
-        if(item) item.fileKeys = key.fileKeys;
-    });
-
-    console.log(items)
+    //
+    // let items = [{_id: 'abc', fruit: "grape"},{_id: 'def', fruit: "grape"}]
+    // let keys = [{_id: 'abc', fileKeys: [{key: "a"}, {key:"b"}]}, {_id: 'abce', fileKeys: [{key: "a"}, {key:"b"}]}]
+    // keys.forEach(key => {
+    //     let item = items.find(item => {
+    //         return key._id === item._id;
+    //     });
+    //     if(item) item.fileKeys = key.fileKeys;
+    // });
+    //
+    // console.log(items)
     //console.log(JSON.parse(file[0].content.toString()));
 
     // let res = await ipfs.files.ls(path);

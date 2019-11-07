@@ -2,7 +2,8 @@ const config = require('../config.json');
 const nav = require('./nav');
 const jsdom = require("jsdom");
 const jquery = require("jquery");
-const mongodb = require('../logic/mongodb');
+//const db = require('../logic/mongodb');
+const db = require('../logic/ipfs');
 const chainwrite = require('../logic/chainwrite');
 
 const chainread = require('../logic/chainread');
@@ -29,7 +30,7 @@ module.exports = {
             item.then(function (result) {
                 let hash = JSON.stringify(result.rows[0].hash).substring(1, JSON.stringify(result.rows[0].hash).length - 1);
                 //2.
-                let db_item_entry_raw = mongodb.read_item_byID(hash);
+                let db_item_entry_raw = db.read_item_byID(hash);
                 db_item_entry_raw.then(function (result) {
                     let encryptedFileKeys = result[0].fileKeys;
                     let encryptedFileKey_user;
@@ -49,7 +50,7 @@ module.exports = {
                         //5.
                         let encryptedFileKey_buyer = crypto.encryptRSA(decryptedFileKey, publicKey_buyer);
                         //6.
-                        let db_transaction = mongodb.write_addEncryptedFileKey(hash, req.body.buyer, encryptedFileKey_buyer);
+                        let db_transaction = db.write_addEncryptedFileKey(hash, req.body.buyer, encryptedFileKey_buyer);
                         db_transaction.then(function (result) {
                             //7.
                             let set_chain_state = chainwrite.sent(req.body.orderKey);

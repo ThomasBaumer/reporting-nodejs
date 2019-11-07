@@ -50,8 +50,6 @@ module.exports = {
             buffer
         );
 
-        console.log(decrypted);
-
         return decrypted
     },
 

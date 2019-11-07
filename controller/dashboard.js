@@ -1,8 +1,8 @@
 const config = require('../config');
 const nav = require('./nav');
-const fs = require('fs');
 const site = "dashboard";
-const mongodb = require('../logic/mongodb');
+//const db = require('../logic/mongodb');
+const db = require('../logic/ipfs');
 const chainwrite = require('../logic/chainwrite');
 const jsdom = require("jsdom");
 const jquery = require("jquery");
@@ -17,7 +17,7 @@ module.exports = {
 
                 //get decrypted file key
                 let hash = req.body.hash;
-                let db_item_entry_raw = mongodb.read_item_byID(hash);
+                let db_item_entry_raw = db.read_item_byID(hash);
                 db_item_entry_raw.then(function (result) {
 
                     let encryptedFileKeys = result[0].fileKeys;
@@ -55,7 +55,7 @@ module.exports = {
                                         let encryptedFileKey_applicant = crypto.encryptRSA(decryptedFileKey, row.publicKey);
                                         console.log("\n\napplicant: " + element + "\n encryptedFileKey_applicant: " + encryptedFileKey_applicant);
                                         //write encrypted file key to database
-                                        mongodb.write_addEncryptedFileKey(hash, element, encryptedFileKey_applicant);
+                                        db.write_addEncryptedFileKey(hash, element, encryptedFileKey_applicant);
                                     }
                                 }
                             });

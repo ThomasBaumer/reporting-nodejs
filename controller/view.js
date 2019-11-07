@@ -1,5 +1,6 @@
 const config = require('../config.json');
-const mongodb = require('../logic/mongodb');
+//const db = require('../logic/mongodb');
+const db = require('../logic/ipfs');
 const crypto = require('../logic/cryptofunctions');
 const nav = require('./nav');
 const jsdom = require("jsdom");
@@ -13,7 +14,7 @@ module.exports = {
     // let head 		= fs.readFileSync(path + 'head.html', 'utf8');
     // let navigation 	= fs.readFileSync(path + 'navigation.html', 'utf8');
     let view 		= nav.load(site);
-    let items 		= mongodb.read_item();
+    let items 		= db.read_item();
 
     if(err) {
         let message = "<div class='label-danger'>Bestellung fehlgeschlagen</div>"+err;
@@ -36,35 +37,38 @@ module.exports = {
         table += '<tr><th>Titel</th><th>Beschreibung</th><th>Branche</th><th>Hash</th><th>Typ</th><th>Daten</th></tr>';
         for(let i = 0; i < result.length; i++) {
             let row = result[i];
-            //console.log(row);
             let text = ""; let label = "";
 
             let encryptedFileKey, encryptedData, iv, decryptedFileKey, decryptedData;
             let owned = false;
-            for(let k = 0; k < row.fileKeys.length; k++) {
-                if (config.user == row.fileKeys[k].user) {
-                    let owned = true;
-                    encryptedFileKey = JSON.stringify(row.fileKeys[k].encryptedFileKey);
 
-                    encryptedData = JSON.stringify(row.encryptedData).substring(1, JSON.stringify(row.encryptedData).length-1); //LITERALS!
-                    iv = JSON.stringify(row.init_vector).substring(1, JSON.stringify(row.init_vector).length-1); //LITERALS!
+            if(row.fileKeys) {
+                for (let k = 0; k < row.fileKeys.length; k++) {
+                    if (config.user == row.fileKeys[k].user) {
+                        owned = true;
+                        encryptedFileKey = JSON.stringify(row.fileKeys[k].encryptedFileKey);
 
-                    decryptedFileKey = crypto.decryptRSA(encryptedFileKey, config.privateKey_mongo);
-                    decryptedData = crypto.decryptAES(encryptedData, decryptedFileKey, iv);
+                        encryptedData = JSON.stringify(row.encryptedData).substring(1, JSON.stringify(row.encryptedData).length - 1); //LITERALS!
+                        iv = JSON.stringify(row.init_vector).substring(1, JSON.stringify(row.init_vector).length - 1); //LITERALS!
 
-                    break;
+                        decryptedFileKey = crypto.decryptRSA(encryptedFileKey, config.privateKey_mongo);
+                        decryptedData = crypto.decryptAES(encryptedData, decryptedFileKey, iv);
+
+                        break;
+                    }
                 }
             }
 
+
             table += '<tr>';
             //TITEL
-            table += '<td>' + JSON.stringify(row.title).substring(1, JSON.stringify(row.title).length-1); + '</td>';
+            table += '<td>' + row.title + '</td>';
             //BESCHREIBUNG
-            table += '<td>' + JSON.stringify(row.description).substring(1, JSON.stringify(row.description).length-1); + '</td>';
+            table += '<td>' + row.description + '</td>';
             //BRANCHE
-            table += '<td>' + JSON.stringify(row.industry).substring(1, JSON.stringify(row.industry).length-1); + '</td>';
+            table += '<td>' + row.industry + '</td>';
             //HASH
-            let hash = JSON.stringify(row._id).substring(1, JSON.stringify(row._id).length-1);
+            let hash =  row._id;
             table += '<td>' + hash.slice(0, hash.length/2) + '<br>' + hash.slice(hash.length/2) + '</td>';
 
             //TYP
