@@ -10,6 +10,9 @@
     "bootstrap",
     "express"
   ],
+  "scripts": {
+    "serve": "node app.js"
+  },
   "dependencies": {
     "assert": "^1.4.1",
     "bigdecimal": "^0.6.1",
