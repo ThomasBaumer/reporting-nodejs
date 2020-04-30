@@ -18,7 +18,7 @@
     "express": "^4.16.4",
     "express-validator": "^5.3.1",
     "fs": "0.0.1-security",
-    "jquery": "^3.4.0",
+    "jquery": "^3.5.0",
     "jsdom": "^14.0.0",
     "mongodb": "^3.2.3",
     "node-fetch": "^2.3.0",
